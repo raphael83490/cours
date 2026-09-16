@@ -1,22 +1,26 @@
-FROM node:20-bullseye-slim
+# Use the official Puppeteer Docker image which has Chrome and all dependencies pre-installed
+FROM ghcr.io/puppeteer/puppeteer:22.6.4
 
-# Install Chromium and required fonts/libraries
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       chromium \
-       fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    PORT=3001
+# Use root to install dependencies and configure app
+USER root
 
 WORKDIR /app
 
+# Copy package files and install
 COPY package*.json ./
 RUN npm install
 
+# Copy source files
 COPY . .
+
+# Set permissions so the puppeteer user can write auth and logs
+RUN chown -R pptruser:pptruser /app
+
+# Use pptruser
+USER pptruser
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
+    PORT=3001
 
 EXPOSE 3001
 
