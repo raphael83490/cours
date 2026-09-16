@@ -253,12 +253,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Déconnexion', 'Vous êtes revenu sur l\'espace public des élèves.', 'info');
   };
 
+  const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
   const [whatsAppStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
 
   // Poll / Fetch WhatsApp Status
   const fetchWhatsAppStatus = async (): Promise<WhatsAppStatus | null> => {
     try {
-      const response = await fetch('/api/whatsapp/status');
+      const response = await fetch(`${API_BASE_URL}/api/whatsapp/status`);
       if (response.ok) {
         const data = await response.json();
         setWhatsAppStatus(data);
@@ -272,7 +273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const restartWhatsApp = async (): Promise<boolean> => {
     try {
-      const response = await fetch('/api/whatsapp/restart', { method: 'POST' });
+      const response = await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { method: 'POST' });
       if (response.ok) {
         showToast('Redémarrage WhatsApp', 'Le client WhatsApp a été réinitialisé.', 'info');
         await fetchWhatsAppStatus();
@@ -295,7 +296,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nativeWhatsAppUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
 
     try {
-      const response = await fetch('/api/send-whatsapp', {
+      const response = await fetch(`${API_BASE_URL}/api/send-whatsapp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, message })
@@ -325,7 +326,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Real SMS Sending Function via backend API
   const sendRealSms = async (to: string, message: string): Promise<{ success: boolean; nativeSmsUrl?: string; status?: string }> => {
     try {
-      const response = await fetch('/api/send-sms', {
+      const response = await fetch(`${API_BASE_URL}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
