@@ -63,6 +63,23 @@ export interface DayAvailability {
   slots: string[];
 }
 
+export interface DateAvailability {
+  date: string; // YYYY-MM-DD
+  enabled: boolean;
+  slots: string[];
+}
+
+export interface FourteenDayItem {
+  iso: string;
+  diffDays: number;
+  dayName: string;
+  weekdayShort: string;
+  weekdayLong: string;
+  formattedShort: string;
+  formattedFull: string;
+  weekNumber: 1 | 2;
+}
+
 export interface BlockedDate {
   date: string; // YYYY-MM-DD
   reason?: string;

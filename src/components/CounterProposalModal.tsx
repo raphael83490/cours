@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useApp, formatDisplayDate } from '../context/AppContext';
+import React, { useState, useMemo } from 'react';
+import { useApp, formatDisplayDate, formatToLocalISO, getFourteenDaysList } from '../context/AppContext';
 import type { Appointment } from '../types';
 import { 
   X, 
@@ -23,10 +23,16 @@ export const CounterProposalModal: React.FC<CounterProposalModalProps> = ({
 }) => {
   const { counterProposeAppointment } = useApp();
 
+  const todayISO = useMemo(() => formatToLocalISO(new Date()), []);
+  const maxBookingDateISO = useMemo(() => {
+    const list = getFourteenDaysList();
+    return list[list.length - 1]?.iso || formatToLocalISO(new Date());
+  }, []);
+
   const getNextAvailableDate = () => {
     const d = new Date();
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().split('T')[0];
+    d.setDate(d.getDate() + 1);
+    return formatToLocalISO(d);
   };
 
   const [newDate, setNewDate] = useState<string>(appointment.date || getNextAvailableDate());
@@ -146,6 +152,8 @@ export const CounterProposalModal: React.FC<CounterProposalModalProps> = ({
             <input
               type="date"
               required
+              min={todayISO}
+              max={maxBookingDateISO}
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
               style={{
@@ -163,7 +171,10 @@ export const CounterProposalModal: React.FC<CounterProposalModalProps> = ({
           <div style={{ marginBottom: '18px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
               <Clock size={16} color="#047857" />
-              2. Nouvel horaire proposé :
+              <span>2. Nouvel horaire proposé :</span>
+              <span style={{ fontSize: '0.76rem', color: '#047857', background: '#DCFCE7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
+                Heure de Paris
+              </span>
             </label>
             
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>

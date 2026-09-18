@@ -63,7 +63,7 @@ export const Navbar: React.FC = () => {
             <span style={{ fontWeight: 600 }}>
               {currentView === 'aymen_portal' 
                 ? '🔒 Espace Privé Enseignant (Aymen)' 
-                : '✨ Cours Particuliers de Coran & Religion Musulmane avec Aymen'}
+                : '✨ Cours Particuliers du Saint Coran avec Aymen'}
             </span>
           </div>
 
@@ -130,7 +130,7 @@ export const Navbar: React.FC = () => {
                 Cours Aymen
               </div>
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Coran • Langue Arabe • Sciences Religieuses
+                Apprentissage & Récitation du Saint Coran
               </div>
             </div>
           </div>

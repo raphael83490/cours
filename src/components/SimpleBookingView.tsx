@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useApp, formatShortDate, formatDisplayDate } from '../context/AppContext';
+import { useApp, formatDisplayDate, formatToLocalISO, getFourteenDaysList } from '../context/AppContext';
 import type { LessonType } from '../types';
 import confetti from 'canvas-confetti';
 import { 
@@ -9,8 +9,6 @@ import {
   Send, 
   User, 
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   Calendar
 } from 'lucide-react';
 
@@ -19,28 +17,24 @@ const DURATION_OPTIONS = [
   { id: '30mn', label: '30 min', title: 'Cours de 30 min' }
 ];
 
-const formatToLocalISO = (d: Date): string => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 export const SimpleBookingView: React.FC = () => {
   const { bookLesson, setCurrentView, getAvailableSlotsForDate } = useApp();
 
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<number>(1); // Default to 30min
   const [selectedType, setSelectedType] = useState<LessonType>('whatsapp');
   
-  const todayISO = useMemo(() => formatToLocalISO(new Date()), []);
-  const [dateOffset, setDateOffset] = useState<number>(0);
-  const DAYS_PER_VIEW = 5;
+  const fourteenDays = useMemo(() => getFourteenDaysList(), []);
+  const [activeTab, setActiveTab] = useState<'all' | 'week1' | 'week2'>('all');
 
-  // Calculate next available date
+  const todayISO = useMemo(() => formatToLocalISO(new Date()), []);
+  const maxBookingDateISO = useMemo(() => {
+    return fourteenDays[fourteenDays.length - 1]?.iso || formatToLocalISO(new Date());
+  }, [fourteenDays]);
+
+  // Default to tomorrow or today if available
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return formatToLocalISO(d);
+    const list = getFourteenDaysList();
+    return list[1]?.iso || list[0]?.iso || formatToLocalISO(new Date());
   });
 
   const availableSlots = useMemo(() => {
@@ -63,73 +57,29 @@ export const SimpleBookingView: React.FC = () => {
 
   const currentDuration = DURATION_OPTIONS[selectedDurationIndex] || DURATION_OPTIONS[1];
 
-  const upcomingDays = useMemo(() => {
-    const days = [];
-    const baseToday = new Date();
-    baseToday.setHours(0, 0, 0, 0);
-
-    for (let i = 0; i < DAYS_PER_VIEW; i++) {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() + dateOffset + i);
-      const iso = formatToLocalISO(d);
-
-      const diffFromToday = Math.round((d.getTime() - baseToday.getTime()) / (1000 * 60 * 60 * 24));
-      const isToday = diffFromToday === 0;
-      const isTomorrow = diffFromToday === 1;
-
-      // Check if day has open slots
-      const slots = getAvailableSlotsForDate(iso);
-
-      days.push({
-        iso,
-        label: isToday ? "Aujourd'hui" : isTomorrow ? 'Demain' : formatShortDate(iso),
-        formatted: d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-        fullFormatted: d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }),
+  const displayedDays = useMemo(() => {
+    return fourteenDays.map((d) => {
+      const slots = getAvailableSlotsForDate(d.iso);
+      return {
+        ...d,
         hasSlots: slots.length > 0,
         slotCount: slots.length
-      });
-    }
-    return days;
-  }, [dateOffset, getAvailableSlotsForDate]);
-
-  const handleNextDays = () => {
-    const newOffset = dateOffset + DAYS_PER_VIEW;
-    setDateOffset(newOffset);
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + newOffset);
-    setSelectedDate(formatToLocalISO(nextDate));
-  };
-
-  const handlePrevDays = () => {
-    const newOffset = Math.max(0, dateOffset - DAYS_PER_VIEW);
-    setDateOffset(newOffset);
-    const prevDate = new Date();
-    prevDate.setDate(prevDate.getDate() + newOffset);
-    setSelectedDate(formatToLocalISO(prevDate));
-  };
-
-  const handleResetToday = () => {
-    setDateOffset(0);
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(formatToLocalISO(d));
-  };
+      };
+    }).filter((d) => {
+      if (activeTab === 'week1') return d.weekNumber === 1;
+      if (activeTab === 'week2') return d.weekNumber === 2;
+      return true;
+    });
+  }, [fourteenDays, activeTab, getAvailableSlotsForDate]);
 
   const handleDirectDatePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
+    let val = e.target.value;
     if (!val) return;
+
+    if (val < todayISO) val = todayISO;
+    if (val > maxBookingDateISO) val = maxBookingDateISO;
+
     setSelectedDate(val);
-
-    const [y, m, d] = val.split('-').map(Number);
-    const target = new Date(y, m - 1, d);
-    target.setHours(0, 0, 0, 0);
-
-    const baseToday = new Date();
-    baseToday.setHours(0, 0, 0, 0);
-
-    const diffDays = Math.max(0, Math.floor((target.getTime() - baseToday.getTime()) / (1000 * 60 * 60 * 24)));
-    setDateOffset(diffDays);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -357,202 +307,186 @@ export const SimpleBookingView: React.FC = () => {
                 flexShrink: 0
               }}>3</span>
               <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
-                  Choisissez le jour et l'heure :
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
+                    Choisissez le jour et l'heure (Disponibilités sur 14 jours) :
+                  </h3>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    background: '#FEF3C7',
+                    border: '1.5px solid #FDE68A',
+                    color: '#92400E',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    ⏰ Heure de Paris (France)
+                  </span>
+                </div>
                 <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {upcomingDays[0] && upcomingDays[upcomingDays.length - 1] ? (
-                    <span>Période affichée : du <strong>{upcomingDays[0].formatted}</strong> au <strong>{upcomingDays[upcomingDays.length - 1].formatted}</strong></span>
-                  ) : (
-                    "Disponibilités d'Aymen en temps réel"
-                  )}
+                  Planning glissant du <strong>{fourteenDays[0]?.formattedShort}</strong> au <strong>{fourteenDays[fourteenDays.length - 1]?.formattedShort}</strong> — tous les horaires sont en <strong>Heure de Paris</strong>.
                 </div>
               </div>
             </div>
 
-            {/* Navigation buttons: Précédent, Aujourd'hui, Dates plus lointaines, et calendrier */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {/* Previous button */}
-              <button
-                type="button"
-                onClick={handlePrevDays}
-                disabled={dateOffset === 0}
+            {/* Direct date picker */}
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '10px',
+                border: '1.5px solid #CBD5E1',
+                background: 'white',
+                cursor: 'pointer',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                color: '#334155'
+              }}
+              title="Sélectionner directement une date précise dans le calendrier"
+            >
+              <Calendar size={15} color="#047857" />
+              <span>Autre date :</span>
+              <input
+                type="date"
+                min={todayISO}
+                max={maxBookingDateISO}
+                value={selectedDate}
+                onChange={handleDirectDatePick}
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #CBD5E1',
-                  background: dateOffset === 0 ? '#F1F5F9' : 'white',
-                  color: dateOffset === 0 ? '#94A3B8' : '#1E293B',
-                  cursor: dateOffset === 0 ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '0.85rem'
-                }}
-                title="Voir les jours précédents"
-              >
-                <ChevronLeft size={16} />
-                <span>Précédent</span>
-              </button>
-
-              {/* Reset to Today button if navigated away */}
-              {dateOffset > 0 && (
-                <button
-                  type="button"
-                  onClick={handleResetToday}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '10px',
-                    border: '1.5px solid #047857',
-                    background: '#F0FDF4',
-                    color: '#047857',
-                    fontWeight: 700,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer'
-                  }}
-                  title="Revenir aux dates actuelles"
-                >
-                  Aujourd'hui
-                </button>
-              )}
-
-              {/* Next arrow: Dates plus lointaines */}
-              <button
-                type="button"
-                onClick={handleNextDays}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #047857',
-                  background: '#047857',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: 700,
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
                   fontSize: '0.85rem',
-                  boxShadow: '0 2px 8px rgba(4, 120, 87, 0.25)',
-                  transition: 'all 0.15s ease'
-                }}
-                title="Avancer vers des dates plus lointaines"
-              >
-                <span>Dates plus lointaines</span>
-                <ChevronRight size={18} />
-              </button>
-
-              {/* Direct date picker */}
-              <label
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  borderRadius: '10px',
-                  border: '1.5px solid #CBD5E1',
-                  background: 'white',
                   cursor: 'pointer',
-                  fontSize: '0.84rem',
-                  fontWeight: 600,
-                  color: '#334155'
+                  color: '#064E3B',
+                  fontWeight: 700
                 }}
-                title="Sélectionner directement une date précise dans le calendrier"
-              >
-                <Calendar size={15} color="#047857" />
-                <span>Autre date :</span>
-                <input
-                  type="date"
-                  min={todayISO}
-                  value={selectedDate}
-                  onChange={handleDirectDatePick}
-                  style={{
-                    border: 'none',
-                    outline: 'none',
-                    background: 'transparent',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    color: '#064E3B',
-                    fontWeight: 700
-                  }}
-                />
-              </label>
-            </div>
+              />
+            </label>
           </div>
 
-          {/* Grid of days + "Plus loin" button card */}
+          {/* Week Tabs */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '14px',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                background: activeTab === 'all' ? '#047857' : '#F1F5F9',
+                color: activeTab === 'all' ? 'white' : '#475569',
+                boxShadow: activeTab === 'all' ? '0 2px 6px rgba(4, 120, 87, 0.25)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Tous les 14 jours ({fourteenDays.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('week1')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                background: activeTab === 'week1' ? '#047857' : '#F1F5F9',
+                color: activeTab === 'week1' ? 'white' : '#475569',
+                boxShadow: activeTab === 'week1' ? '0 2px 6px rgba(4, 120, 87, 0.25)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Semaine 1 (7 premiers jours)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('week2')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                background: activeTab === 'week2' ? '#047857' : '#F1F5F9',
+                color: activeTab === 'week2' ? 'white' : '#475569',
+                boxShadow: activeTab === 'week2' ? '0 2px 6px rgba(4, 120, 87, 0.25)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Semaine 2 (7 jours suivants)
+            </button>
+          </div>
+
+          {/* Grid of days */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
             gap: '10px',
             marginBottom: '16px'
           }}>
-            {upcomingDays.map((d, idx) => {
+            {displayedDays.map((d) => {
               const isSelected = selectedDate === d.iso;
               return (
                 <button
                   type="button"
-                  key={idx}
+                  key={d.iso}
                   onClick={() => setSelectedDate(d.iso)}
                   style={{
-                    padding: '14px 10px',
+                    padding: '12px 10px',
                     borderRadius: 'var(--radius-md)',
-                    border: `2.5px solid ${isSelected ? '#047857' : '#CBD5E1'}`,
+                    border: `2.5px solid ${isSelected ? '#047857' : '#E2E8F0'}`,
                     background: isSelected ? '#047857' : 'white',
                     color: isSelected ? 'white' : '#1E293B',
                     textAlign: 'center',
                     fontWeight: 700,
-                    opacity: d.hasSlots ? 1 : 0.6,
+                    opacity: d.hasSlots ? 1 : 0.65,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    boxShadow: isSelected ? '0 4px 12px rgba(4, 120, 87, 0.25)' : 'none'
+                    boxShadow: isSelected ? '0 4px 12px rgba(4, 120, 87, 0.25)' : 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '2px'
                   }}
                 >
-                  <div style={{ fontSize: '1.05rem' }}>{d.label}</div>
+                  <div style={{ fontSize: '0.98rem', fontWeight: 800 }}>
+                    {d.dayName}
+                  </div>
                   <div style={{ fontSize: '0.82rem', opacity: isSelected ? 0.92 : 0.75 }}>
-                    {d.formatted}
+                    {d.formattedShort}
                   </div>
                   <div style={{
-                    fontSize: '0.75rem',
+                    fontSize: '0.74rem',
                     marginTop: '4px',
-                    color: isSelected ? '#A7F3D0' : d.hasSlots ? '#047857' : '#94A3B8'
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: isSelected ? 'rgba(255,255,255,0.2)' : d.hasSlots ? '#DCFCE7' : '#F1F5F9',
+                    color: isSelected ? 'white' : d.hasSlots ? '#166534' : '#94A3B8',
+                    fontWeight: 700
                   }}>
-                    {d.hasSlots ? `${d.slotCount} créneau${d.slotCount > 1 ? 's' : ''}` : 'Complet / Fermé'}
+                    {d.hasSlots ? `${d.slotCount} créneau${d.slotCount > 1 ? 's' : ''}` : 'Fermé / Indispo'}
                   </div>
                 </button>
               );
             })}
-
-            {/* Quick Next Button card directly inside the grid */}
-            <button
-              type="button"
-              onClick={handleNextDays}
-              style={{
-                padding: '14px 10px',
-                borderRadius: 'var(--radius-md)',
-                border: '2px dashed #047857',
-                background: '#F0FDF4',
-                color: '#047857',
-                textAlign: 'center',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              title="Voir les dates suivantes (+5 jours)"
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.95rem', fontWeight: 800 }}>
-                <span>Plus loin</span>
-                <ChevronRight size={18} />
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#065F46', opacity: 0.85 }}>
-                +5 jours ➔
-              </div>
-            </button>
           </div>
 
           {/* Selected Date Summary Banner */}
@@ -574,9 +508,12 @@ export const SimpleBookingView: React.FC = () => {
               <strong style={{ color: '#064E3B', textTransform: 'capitalize' }}>
                 {formatDisplayDate(selectedDate)}
               </strong>
+              <span style={{ marginLeft: '6px', fontSize: '0.8rem', color: '#92400E', background: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                Heure de Paris
+              </span>
             </div>
             {availableSlots.length > 0 && (
-              <span style={{ color: '#047857', fontWeight: 600, fontSize: '0.85rem' }}>
+              <span style={{ color: '#047857', fontWeight: 700, fontSize: '0.85rem' }}>
                 {availableSlots.length} créneau{availableSlots.length > 1 ? 's' : ''} disponible{availableSlots.length > 1 ? 's' : ''}
               </span>
             )}
@@ -599,8 +536,11 @@ export const SimpleBookingView: React.FC = () => {
             </div>
           ) : (
             <>
-              <label style={{ display: 'block', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-                Créneaux disponibles pour ce jour :
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+                <span>Créneaux disponibles pour ce jour :</span>
+                <span style={{ fontSize: '0.78rem', color: '#047857', fontWeight: 800, background: '#DCFCE7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
+                  ⏰ Heure de Paris
+                </span>
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                 {availableSlots.map((time) => {
@@ -722,7 +662,7 @@ export const SimpleBookingView: React.FC = () => {
             {isSubmitting ? 'Envoi du SMS...' : 'Envoyer ma demande de cours à Aymen'}
           </button>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '10px' }}>
-            Aymen recevra votre demande immédiatement et vous confirmera par SMS.
+            Aymen recevra votre demande immédiatement et vous confirmera par WhatsApp / SMS (horaires en Heure de Paris).
           </div>
         </div>
       </form>

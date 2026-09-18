@@ -61,11 +61,24 @@ export const AymenAgenda: React.FC = () => {
             <CalendarIcon size={22} />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#064E3B' }}>
-              Planning des cours d'Aymen
-            </h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Semaine du {weekDays[0].dateFormatted} au {weekDays[6].dateFormatted}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
+                Planning des cours d'Aymen
+              </h2>
+              <span style={{
+                padding: '2px 8px',
+                borderRadius: '8px',
+                background: '#FEF3C7',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                fontSize: '0.75rem',
+                fontWeight: 800
+              }}>
+                ⏰ Heure de Paris
+              </span>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+              Semaine du {weekDays[0].dateFormatted} au {weekDays[6].dateFormatted} (horaires en Heure de Paris)
             </p>
           </div>
         </div>

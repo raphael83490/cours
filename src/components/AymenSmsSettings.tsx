@@ -16,7 +16,6 @@ export const AymenSmsSettings: React.FC = () => {
     smsConfig, 
     updateSmsConfig, 
     sendRealSms, 
-    sendRealWhatsApp, 
     fetchWhatsAppStatus, 
     restartWhatsApp, 
     whatsAppStatus, 
@@ -33,10 +32,6 @@ export const AymenSmsSettings: React.FC = () => {
   const [brevoApiKey, setBrevoApiKey] = useState(smsConfig.brevoApiKey || '');
   const [brevoSender, setBrevoSender] = useState(smsConfig.brevoSender || 'AymenCours');
 
-  // WhatsApp Testing State
-  const [waTestPhone, setWaTestPhone] = useState('');
-  const [isWaTesting, setIsWaTesting] = useState(false);
-  const [waTestResult, setWaTestResult] = useState<{ success: boolean; message: string; nativeWhatsAppUrl?: string; isAutoSent?: boolean } | null>(null);
   const [isRestartingWa, setIsRestartingWa] = useState(false);
 
   // SMS Testing State
@@ -65,35 +60,6 @@ export const AymenSmsSettings: React.FC = () => {
     });
   };
 
-  const handleTestWhatsApp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!waTestPhone.trim()) return;
-
-    setIsWaTesting(true);
-    setWaTestResult(null);
-
-    const testMessage = `COURS AYMEN : 🌟 Ceci est un message test WhatsApp 100% automatique depuis votre plateforme Cours Aymen. Tout fonctionne à merveille !`;
-
-    try {
-      const res = await sendRealWhatsApp(waTestPhone.trim(), testMessage);
-      setIsWaTesting(false);
-      setWaTestResult({
-        success: true,
-        message: res.isAutoSent 
-          ? `Message WhatsApp transmis automatiquement en tâche de fond au ${waTestPhone} !` 
-          : `Lien WhatsApp prêt pour le ${waTestPhone}. (Scannez le QR Code ci-dessous pour activer l'envoi 100% automatique)`,
-        nativeWhatsAppUrl: res.nativeWhatsAppUrl,
-        isAutoSent: res.isAutoSent
-      });
-      showToast('WhatsApp expédié', `Le message WhatsApp a été généré pour le ${waTestPhone}.`, 'success');
-    } catch (err) {
-      setIsWaTesting(false);
-      setWaTestResult({
-        success: false,
-        message: 'Erreur lors de l\'envoi WhatsApp : ' + String(err)
-      });
-    }
-  };
 
   const handleRestartWaClient = async () => {
     setIsRestartingWa(true);
@@ -374,85 +340,6 @@ export const AymenSmsSettings: React.FC = () => {
             )}
           </div>
 
-          {/* Test Live WhatsApp Sending Form */}
-          <div className="card" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#064E3B', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Send size={18} color="#25D366" /> Tester l'envoi d'un message WhatsApp réel
-            </h3>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Entrez votre numéro pour vérifier que le message WhatsApp est bien reçu.
-            </p>
-
-            <form onSubmit={handleTestWhatsApp} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
-              <input
-                type="tel"
-                required
-                placeholder="Ex: 06 12 34 56 78"
-                value={waTestPhone}
-                onChange={(e) => setWaTestPhone(e.target.value)}
-                style={{ flex: 1, minWidth: '220px', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '1rem' }}
-              />
-
-              <button 
-                type="submit" 
-                disabled={isWaTesting} 
-                className="btn"
-                style={{
-                  background: '#25D366',
-                  color: '#064E3B',
-                  fontWeight: 800,
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '10px 18px',
-                  borderRadius: '8px',
-                  cursor: 'pointer'
-                }}
-              >
-                <Send size={16} /> {isWaTesting ? 'Envoi...' : 'Envoyer le WhatsApp de test'}
-              </button>
-            </form>
-
-            {waTestResult && (
-              <div style={{
-                padding: '14px',
-                borderRadius: '10px',
-                background: waTestResult.success ? '#F0FDF4' : '#FEF2F2',
-                border: `1.5px solid ${waTestResult.success ? '#86EFAC' : '#FCA5A5'}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '10px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', color: waTestResult.success ? '#166534' : '#991B1B' }}>
-                  {waTestResult.success ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-                  <span>{waTestResult.message}</span>
-                </div>
-
-                {waTestResult.nativeWhatsAppUrl && (
-                  <a
-                    href={waTestResult.nativeWhatsAppUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-sm"
-                    style={{
-                      background: '#25D366',
-                      color: '#064E3B',
-                      fontWeight: 700,
-                      fontSize: '0.82rem',
-                      border: 'none',
-                      borderRadius: '6px',
-                      padding: '6px 12px'
-                    }}
-                  >
-                    💬 Ouvrir dans WhatsApp
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       )}
 

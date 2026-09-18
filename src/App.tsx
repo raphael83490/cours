@@ -41,7 +41,7 @@ const MainApp: React.FC = () => {
               letterSpacing: '-0.02em',
               marginBottom: '10px'
             }}>
-              Apprentissage du Coran & Cours de Religion
+              Apprentissage du Saint Coran
             </h1>
             <p style={{ fontSize: '1.15rem', opacity: 0.92, maxWidth: '680px', margin: '0 auto 16px', lineHeight: 1.5 }}>
               Cours particuliers avec <strong>Aymen</strong> dans la bienveillance et la patience. Ouvert à tous (débutants, personnes âgées, adultes et enfants).
@@ -152,7 +152,7 @@ const MainApp: React.FC = () => {
         }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'white' }}>
-              Cours de Religion & Coran — Aymen
+              Cours de Coran — Aymen
             </div>
             <p style={{ fontSize: '0.88rem', color: '#A7F3D0', marginTop: '4px' }}>
               Enseignement bienveillant et cours particuliers adaptés à tous les âges.

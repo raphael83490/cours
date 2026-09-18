@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, X, KeyRound, ShieldCheck } from 'lucide-react';
+import { Lock, X, KeyRound } from 'lucide-react';
 
 interface AymenLoginModalProps {
   isOpen: boolean;
@@ -100,7 +100,7 @@ export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClos
             Cet espace permet à <strong>Aymen</strong> de gérer les demandes de cours, d'accepter les réservations et de proposer de nouveaux horaires.
           </p>
 
-          <div style={{ marginBottom: '16px' }}>
+          <div style={{ marginBottom: '24px' }}>
             <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
               Code d'accès Enseignant :
             </label>
@@ -110,7 +110,7 @@ export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClos
                 type="password"
                 required
                 autoFocus
-                placeholder="Entrez votre mot de passe (ex: 1234)"
+                placeholder="Entrez votre mot de passe"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
@@ -128,25 +128,9 @@ export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClos
             </div>
             {error && (
               <p style={{ color: '#EF4444', fontSize: '0.82rem', marginTop: '6px', fontWeight: 600 }}>
-                Mot de passe incorrect. (Indice pour la démo : tapez <strong>1234</strong> ou <strong>aymen</strong>)
+                Mot de passe incorrect. Veuillez réessayer.
               </p>
             )}
-          </div>
-
-          <div style={{
-            padding: '10px 14px',
-            background: '#F0FDF4',
-            borderRadius: '8px',
-            border: '1px solid #BBF7D0',
-            fontSize: '0.82rem',
-            color: '#166534',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <ShieldCheck size={16} />
-            <span>Code de démonstration rapide : <strong>1234</strong></span>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>

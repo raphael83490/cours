@@ -8,7 +8,8 @@ import type {
   DayAvailability, 
   BlockedDate, 
   SmsConfig,
-  WhatsAppStatus
+  WhatsAppStatus,
+  FourteenDayItem
 } from '../types';
 import { 
   INITIAL_APPOINTMENTS, 
@@ -86,8 +87,21 @@ interface AppContextType {
   restartWhatsApp: () => Promise<boolean>;
   whatsAppStatus: WhatsAppStatus | null;
 
-  // Availability Management for Aymen
+  // Availability Management for Aymen (14 days rolling window)
   getAvailableSlotsForDate: (dateStr: string) => string[];
+  customDateSlots: Record<string, { enabled: boolean; slots: string[] }>;
+  getDateConfig: (dateStr: string) => { enabled: boolean; slots: string[]; isCustom: boolean };
+  toggleDateEnabled: (dateStr: string) => void;
+  setDateEnabled: (dateStr: string, enabled: boolean) => void;
+  toggleSlotForDate: (dateStr: string, slot: string) => void;
+  setSlotsForDate: (dateStr: string, slots: string[]) => void;
+  applyPresetToDate: (dateStr: string, presetSlots: string[]) => void;
+  clearSlotsForDate: (dateStr: string) => void;
+  copyDateSlotsToTwoWeeks: (sourceDateStr: string) => void;
+  setAllDatesOpen: (open: boolean) => void;
+  openAll14DaysWithDefaultSlots: () => void;
+  resetDateToDefault: (dateStr: string) => void;
+  resetAllTwoWeeksToDefault: () => void;
   toggleDayEnabled: (dayOfWeek: number) => void;
   toggleSlotForDay: (dayOfWeek: number, slot: string) => void;
   setSlotsForDay: (dayOfWeek: number, slots: string[]) => void;
@@ -116,11 +130,12 @@ export const normalizePhone = (phone?: string): string => {
   return phone.replace(/[\s.\-_()]/g, '').replace(/^\+33/, '0');
 };
 
-const STORAGE_KEY_APPOINTMENTS = 'aymen_religion_lessons_v3';
-const STORAGE_KEY_NOTIFICATIONS = 'aymen_religion_notifs_v3';
-const STORAGE_KEY_PROFILE = 'aymen_religion_teacher_v4';
+const STORAGE_KEY_APPOINTMENTS = 'aymen_quran_lessons_v5';
+const STORAGE_KEY_NOTIFICATIONS = 'aymen_quran_notifs_v5';
+const STORAGE_KEY_PROFILE = 'aymen_quran_teacher_v5';
 const STORAGE_KEY_AUTH = 'aymen_is_authenticated_v3';
 const STORAGE_KEY_AVAILABILITY = 'aymen_availability_v3';
+const STORAGE_KEY_CUSTOM_DATE_SLOTS = 'aymen_custom_date_slots_v2';
 const STORAGE_KEY_BLOCKED_DATES = 'aymen_blocked_dates_v3';
 const STORAGE_KEY_SMS_CONFIG = 'aymen_sms_config_v3';
 const STORAGE_KEY_STUDENT_PHONE = 'aymen_student_phone_v3';
@@ -128,7 +143,7 @@ const STORAGE_KEY_STUDENT_NAME = 'aymen_student_name_v3';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [teacher, setTeacher] = useState<TeacherProfile>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PROFILE) || localStorage.getItem('aymen_religion_teacher_v3');
+    const saved = localStorage.getItem(STORAGE_KEY_PROFILE);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -136,7 +151,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...INITIAL_TEACHER,
           ...parsed,
           name: 'Aymen',
-          location: parsed.location ? parsed.location.replace(/Paris\s*(&\s*)?/gi, '').trim() : INITIAL_TEACHER.location,
           avatarUrl: ''
         };
       } catch {
@@ -159,6 +173,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [availability, setAvailability] = useState<DayAvailability[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_AVAILABILITY);
     return saved ? JSON.parse(saved) : INITIAL_AVAILABILITY;
+  });
+
+  const [customDateSlots, setCustomDateSlots] = useState<Record<string, { enabled: boolean; slots: string[] }>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CUSTOM_DATE_SLOTS);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {};
+      }
+    }
+    return {};
   });
 
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>(() => {
@@ -224,6 +250,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [availability]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CUSTOM_DATE_SLOTS, JSON.stringify(customDateSlots));
+  }, [customDateSlots]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEY_BLOCKED_DATES, JSON.stringify(blockedDates));
   }, [blockedDates]);
 
@@ -236,8 +266,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isAymenLoggedIn]);
 
   const loginAymen = (pass: string): boolean => {
-    const trimmed = pass.trim().toLowerCase();
-    if (trimmed === '1234' || trimmed === 'aymen' || trimmed === 'aymen2026') {
+    const trimmed = pass.trim();
+    if (trimmed === 'aymen123') {
       setIsAymenLoggedIn(true);
       setCurrentView('aymen_portal');
       showToast('Connexion réussie', 'Bienvenue dans votre espace enseignant Aymen.', 'success');
@@ -358,29 +388,230 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Helper to get dynamically available slots for a given date
+  // Helper to get configuration for a specific date (custom override or fallback to week day template)
+  const getDateConfig = (dateStr: string): { enabled: boolean; slots: string[]; isCustom: boolean } => {
+    if (customDateSlots[dateStr] !== undefined) {
+      return {
+        enabled: customDateSlots[dateStr].enabled,
+        slots: customDateSlots[dateStr].slots,
+        isCustom: true
+      };
+    }
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day);
+    const dayOfWeek = dateObj.getDay(); // 0 = Dimanche, 1 = Lundi, etc.
+    const dayConfig = availability.find(a => a.dayOfWeek === dayOfWeek);
+    return {
+      enabled: dayConfig ? dayConfig.enabled : false,
+      slots: dayConfig ? [...dayConfig.slots] : [],
+      isCustom: false
+    };
+  };
+
+  // Helper to get dynamically available slots for a given date (strictly bounded to max 14 days rolling window)
   const getAvailableSlotsForDate = (dateStr: string): string[] => {
-    // Check if date is in blocked dates
+    // 1. Strict 14-day rolling window check (0 <= diffDays < 14)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const target = new Date(year, month - 1, day);
+    target.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Refuse booking in the past or beyond 14 days
+    if (diffDays < 0 || diffDays >= 14) {
+      return [];
+    }
+
+    // 2. Check if date is in blocked dates
     if (blockedDates.some(b => b.date === dateStr)) {
       return [];
     }
 
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const dateObj = new Date(year, month - 1, day);
-    const dayOfWeek = dateObj.getDay(); // 0 = Dimanche, 1 = Lundi, etc.
-
-    const dayConfig = availability.find(a => a.dayOfWeek === dayOfWeek);
-    if (!dayConfig || !dayConfig.enabled) {
+    // 3. Get config for this date
+    const cfg = getDateConfig(dateStr);
+    if (!cfg.enabled) {
       return [];
     }
 
-    // Filter out slots already taken/pending
-    return dayConfig.slots.filter(slot => {
+    // 4. Filter out slots already taken/pending and past slots for today
+    const now = new Date();
+
+    return cfg.slots.filter(slot => {
+      // If booking for today, do not allow slots that have already started
+      if (diffDays === 0) {
+        const [h, m] = slot.split(':').map(Number);
+        const slotDate = new Date(today);
+        slotDate.setHours(h, m, 0, 0);
+        if (slotDate.getTime() <= now.getTime() + 15 * 60 * 1000) {
+          return false;
+        }
+      }
+
       const isTaken = appointments.some(
         apt => apt.date === dateStr && apt.time === slot && (apt.status === 'accepted' || apt.status === 'pending')
       );
       return !isTaken;
     });
+  };
+
+  // 14-Day Date Specific Availability Actions for Aymen
+  const toggleDateEnabled = (dateStr: string) => {
+    const current = getDateConfig(dateStr);
+    setCustomDateSlots(prev => ({
+      ...prev,
+      [dateStr]: {
+        enabled: !current.enabled,
+        slots: current.slots
+      }
+    }));
+    showToast('Disponibilité mise à jour', `Le ${formatDisplayDate(dateStr)} est maintenant ${!current.enabled ? 'Ouvert' : 'Fermé'}.`, 'info');
+  };
+
+  const setDateEnabled = (dateStr: string, enabled: boolean) => {
+    const current = getDateConfig(dateStr);
+    setCustomDateSlots(prev => ({
+      ...prev,
+      [dateStr]: {
+        enabled,
+        slots: current.slots
+      }
+    }));
+  };
+
+  const toggleSlotForDate = (dateStr: string, slot: string) => {
+    const current = getDateConfig(dateStr);
+    const exists = current.slots.includes(slot);
+    const newSlots = exists 
+      ? current.slots.filter(s => s !== slot) 
+      : [...current.slots, slot].sort();
+
+    setCustomDateSlots(prev => ({
+      ...prev,
+      [dateStr]: {
+        enabled: true,
+        slots: newSlots
+      }
+    }));
+  };
+
+  const setSlotsForDate = (dateStr: string, slots: string[]) => {
+    const current = getDateConfig(dateStr);
+    setCustomDateSlots(prev => ({
+      ...prev,
+      [dateStr]: {
+        enabled: slots.length > 0 ? true : current.enabled,
+        slots: [...slots].sort()
+      }
+    }));
+  };
+
+  const applyPresetToDate = (dateStr: string, presetSlots: string[]) => {
+    const current = getDateConfig(dateStr);
+    const merged = Array.from(new Set([...current.slots, ...presetSlots])).sort();
+    setCustomDateSlots(prev => ({
+      ...prev,
+      [dateStr]: {
+        enabled: true,
+        slots: merged
+      }
+    }));
+  };
+
+  const clearSlotsForDate = (dateStr: string) => {
+    setCustomDateSlots(prev => ({
+      ...prev,
+      [dateStr]: {
+        enabled: false,
+        slots: []
+      }
+    }));
+  };
+
+  const copyDateSlotsToTwoWeeks = (sourceDateStr: string) => {
+    const source = getDateConfig(sourceDateStr);
+    const updates: Record<string, { enabled: boolean; slots: string[] }> = {};
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const iso = formatToLocalISO(d);
+      updates[iso] = {
+        enabled: source.enabled,
+        slots: [...source.slots]
+      };
+    }
+
+    setCustomDateSlots(prev => ({
+      ...prev,
+      ...updates
+    }));
+    showToast('Planning appliqué', `Les horaires du ${formatDisplayDate(sourceDateStr)} ont été appliqués sur les 14 jours.`, 'success');
+  };
+
+  const setAllDatesOpen = (open: boolean) => {
+    const updates: Record<string, { enabled: boolean; slots: string[] }> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const iso = formatToLocalISO(d);
+      const current = getDateConfig(iso);
+      updates[iso] = {
+        enabled: open,
+        slots: open && current.slots.length === 0 
+          ? ['09:30', '11:00', '14:30', '16:00', '17:30', '19:00'] 
+          : [...current.slots]
+      };
+    }
+
+    setCustomDateSlots(prev => ({
+      ...prev,
+      ...updates
+    }));
+    showToast('Disponibilités mises à jour', open ? 'Les 14 jours sont maintenant ouverts.' : 'Les 14 jours ont été fermés.', 'info');
+  };
+
+  const openAll14DaysWithDefaultSlots = () => {
+    const updates: Record<string, { enabled: boolean; slots: string[] }> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const iso = formatToLocalISO(d);
+      const dayOfWeek = d.getDay();
+      const defaultDay = availability.find(a => a.dayOfWeek === dayOfWeek);
+      updates[iso] = {
+        enabled: defaultDay ? defaultDay.enabled : false,
+        slots: defaultDay ? [...defaultDay.slots] : []
+      };
+    }
+
+    setCustomDateSlots(updates);
+    showToast('Horaires réinitialisés', 'Les 14 jours ont été réinitialisés avec vos horaires standards.', 'info');
+  };
+
+  const resetDateToDefault = (dateStr: string) => {
+    setCustomDateSlots(prev => {
+      const copy = { ...prev };
+      delete copy[dateStr];
+      return copy;
+    });
+    showToast('Horaires réinitialisés', `Le ${formatDisplayDate(dateStr)} utilise de nouveau l'horaire habituel.`, 'info');
+  };
+
+  const resetAllTwoWeeksToDefault = () => {
+    setCustomDateSlots({});
+    showToast('Réinitialisation', 'Les 14 jours reprennent les horaires habituels par défaut.', 'info');
   };
 
   // Availability toggles
@@ -515,7 +746,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'notif-' + Date.now(),
       targetRole: 'aymen',
       title: '📖 Nouvelle demande de cours reçue',
-      message: `${data.patientName} a demandé un cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (${data.type === 'zoom' ? 'Zoom' : 'WhatsApp'}).`,
+      message: `${data.patientName} a demandé un cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${data.type === 'zoom' ? 'Zoom' : 'WhatsApp'}).`,
       type: 'booking_received',
       appointmentId: newApt.id,
       appointmentData: newApt,
@@ -528,7 +759,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     playNotificationSound();
 
     const modeLabel = data.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
-    const smsBody = `COURS AYMEN : Salam Aleykoum ${data.patientName}, votre demande de cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (${modeLabel}) a bien été transmise à Aymen. Vous recevrez la confirmation et le lien dès validation.`;
+    const smsBody = `COURS AYMEN : Salam Aleykoum ${data.patientName}, votre demande de cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}) a bien été transmise à Aymen. Vous recevrez la confirmation et le lien dès validation.`;
 
     // Real SMS & WhatsApp trigger
     sendRealWhatsApp(data.patientPhone, smsBody).then(waRes => {
@@ -539,7 +770,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recipientContact: data.patientPhone,
           body: smsBody,
           badge: waRes.isAutoSent ? 'Demande envoyée par WhatsApp Automatique' : 'Demande envoyée par SMS',
-          dateInfo: `${formatDisplayDate(data.date)} à ${data.time}`,
+          dateInfo: `${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris)`,
           nativeSmsUrl: smsRes.nativeSmsUrl,
           nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
           statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
@@ -549,7 +780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast(
       'Demande de cours envoyée !',
-      `Votre demande a bien été transmise à Aymen pour le ${formatDisplayDate(data.date)} à ${data.time}.`,
+      `Votre demande a bien été transmise à Aymen pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris).`,
       'success'
     );
 
@@ -579,7 +810,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'notif-' + Date.now(),
       targetRole: 'patient',
       title: '✅ Cours confirmé par Aymen !',
-      message: `Votre cours du ${formatDisplayDate(apt.date)} à ${apt.time} est validé (${apt.type === 'zoom' ? 'sur Zoom' : 'sur WhatsApp'}).${note ? ` Message d'Aymen : "${note}"` : ''}`,
+      message: `Votre cours du ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris) est validé (${apt.type === 'zoom' ? 'sur Zoom' : 'sur WhatsApp'}).${note ? ` Message d'Aymen : "${note}"` : ''}`,
       type: 'accepted',
       appointmentId: id,
       appointmentData: updatedApt,
@@ -594,7 +825,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isZoom = apt.type === 'zoom' || apt.type === 'en_ligne';
     const modeLabel = isZoom ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
     const zoomText = isZoom ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';
-    const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time}. Mode : ${modeLabel}.${zoomText} ${note ? `Note d'Aymen : "${note}"` : ''}`;
+    const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mode : ${modeLabel}.${zoomText} ${note ? `Note d'Aymen : "${note}"` : ''}`;
 
     // Real WhatsApp + SMS dispatch
     sendRealWhatsApp(apt.patientPhone, smsBody).then(waRes => {
@@ -605,7 +836,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recipientContact: apt.patientPhone,
           body: smsBody,
           badge: waRes.isAutoSent ? 'Confirmation WhatsApp Automatique' : 'Cours Confirmé (SMS)',
-          dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time}`,
+          dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris)`,
           nativeSmsUrl: smsRes.nativeSmsUrl,
           nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
           statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
@@ -636,7 +867,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'notif-' + Date.now(),
       targetRole: 'patient',
       title: '🔄 Nouvel horaire proposé par Aymen',
-      message: `Aymen vous propose de déplacer le cours au ${formatDisplayDate(newDate)} à ${newTime}. Message : "${message}"`,
+      message: `Aymen vous propose de déplacer le cours au ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message : "${message}"`,
       type: 'counter_proposed',
       appointmentId: id,
       appointmentData: updatedApt,
@@ -648,7 +879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [notifForStudent, ...prev]);
     playNotificationSound();
 
-    const smsBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen ne peut pas le ${formatDisplayDate(apt.date)} et vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime}. Message d'Aymen : "${message}". Répondez en 1 clic : http://localhost:5173/`;
+    const smsBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen ne peut pas le ${formatDisplayDate(apt.date)} et vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message d'Aymen : "${message}". Répondez en 1 clic : http://localhost:5173/`;
 
     // Real WhatsApp + SMS dispatch
     sendRealWhatsApp(apt.patientPhone, smsBody).then(waRes => {
@@ -659,7 +890,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recipientContact: apt.patientPhone,
           body: smsBody,
           badge: waRes.isAutoSent ? 'Proposition WhatsApp Automatique' : 'Proposition de nouvel horaire (SMS)',
-          dateInfo: `${formatDisplayDate(newDate)} à ${newTime}`,
+          dateInfo: `${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris)`,
           nativeSmsUrl: smsRes.nativeSmsUrl,
           nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
           statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
@@ -667,7 +898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
 
-    showToast('Nouvel horaire envoyé', `Votre proposition (${formatDisplayDate(newDate)} à ${newTime}) a été transmise par WhatsApp/SMS à l'élève.`, 'info');
+    showToast('Nouvel horaire envoyé', `Votre proposition (${formatDisplayDate(newDate)} à ${newTime} - Heure de Paris) a été transmise par WhatsApp/SMS à l'élève.`, 'info');
   };
 
   // 4. Student Accepts Counter Proposal
@@ -692,7 +923,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: 'notif-' + Date.now(),
       targetRole: 'aymen',
       title: '🎉 Nouvel horaire accepté par l\'élève !',
-      message: `${apt.patientName} a accepté votre proposition pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time}.`,
+      message: `${apt.patientName} a accepté votre proposition pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris).`,
       type: 'counter_accepted',
       appointmentId: id,
       appointmentData: updatedApt,
@@ -709,7 +940,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : undefined;
 
     const zoomText = (apt.type === 'zoom' || apt.type === 'en_ligne') ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';
-    const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName} ! C'est parfait, votre cours avec Aymen est bien confirmé pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time}.${zoomText} Qu'Allah vous facilite l'apprentissage.`;
+    const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName} ! C'est parfait, votre cours avec Aymen est bien confirmé pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris).${zoomText} Qu'Allah vous facilite l'apprentissage.`;
 
     sendRealWhatsApp(apt.patientPhone, smsBody).then(waRes => {
       sendRealSms(apt.patientPhone, smsBody).then(smsRes => {
@@ -719,7 +950,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recipientContact: apt.patientPhone,
           body: smsBody,
           badge: waRes.isAutoSent ? 'Confirmation WhatsApp Automatique' : 'Cours Confirmé (SMS)',
-          dateInfo: `${formatDisplayDate(updatedApt.date)} à ${updatedApt.time}`,
+          dateInfo: `${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris)`,
           nativeSmsUrl: smsRes.nativeSmsUrl,
           nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
           statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
@@ -727,7 +958,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
 
-    showToast('Horaire validé !', `Votre cours est maintenant confirmé pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time}.`, 'success');
+    showToast('Horaire validé !', `Votre cours est maintenant confirmé pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris).`, 'success');
   };
 
   // 5. Decline Appointment
@@ -858,6 +1089,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         restartWhatsApp,
         whatsAppStatus,
         getAvailableSlotsForDate,
+        customDateSlots,
+        getDateConfig,
+        toggleDateEnabled,
+        setDateEnabled,
+        toggleSlotForDate,
+        setSlotsForDate,
+        applyPresetToDate,
+        clearSlotsForDate,
+        copyDateSlotsToTwoWeeks,
+        setAllDatesOpen,
+        openAll14DaysWithDefaultSlots,
+        resetDateToDefault,
+        resetAllTwoWeeksToDefault,
         toggleDayEnabled,
         toggleSlotForDay,
         setSlotsForDay,
@@ -888,6 +1132,43 @@ export const useApp = () => {
   }
   return context;
 };
+
+export function formatToLocalISO(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getFourteenDaysList(): FourteenDayItem[] {
+  const days: FourteenDayItem[] = [];
+  const baseToday = new Date();
+  baseToday.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(baseToday);
+    d.setDate(baseToday.getDate() + i);
+    const iso = formatToLocalISO(d);
+    const isToday = i === 0;
+    const isTomorrow = i === 1;
+
+    const weekdayShort = d.toLocaleDateString('fr-FR', { weekday: 'short' });
+    const weekdayLong = d.toLocaleDateString('fr-FR', { weekday: 'long' });
+    const capitalizedWeekday = weekdayLong.charAt(0).toUpperCase() + weekdayLong.slice(1);
+
+    days.push({
+      iso,
+      diffDays: i,
+      dayName: isToday ? "Aujourd'hui" : isTomorrow ? "Demain" : capitalizedWeekday,
+      weekdayShort: weekdayShort.charAt(0).toUpperCase() + weekdayShort.slice(1),
+      weekdayLong: capitalizedWeekday,
+      formattedShort: d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+      formattedFull: d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+      weekNumber: i < 7 ? 1 : 2
+    });
+  }
+  return days;
+}
 
 export function formatDisplayDate(dateStr: string): string {
   try {
