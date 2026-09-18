@@ -147,9 +147,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        const phone = (parsed.phone && parsed.phone !== '06 50 20 30 40') ? parsed.phone : INITIAL_TEACHER.phone;
+        const zoomLink = (parsed.zoomLink && !parsed.zoomLink.includes('84920482910')) ? parsed.zoomLink : INITIAL_TEACHER.zoomLink;
         return {
           ...INITIAL_TEACHER,
           ...parsed,
+          phone,
+          zoomLink,
           name: 'Aymen',
           avatarUrl: ''
         };
@@ -727,7 +731,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     time: string;
     patientNotes?: string;
   }): Appointment => {
-    const effectiveZoomLink = data.type === 'zoom' ? (teacher.zoomLink || 'https://us05web.zoom.us/j/84920482910?pwd=aymencours') : undefined;
+    const effectiveZoomLink = data.type === 'zoom' ? (teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1') : undefined;
 
     const newApt: Appointment = {
       id: 'apt-' + Date.now(),
@@ -793,7 +797,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!apt) return;
 
     const effectiveZoomLink = (apt.type === 'zoom' || apt.type === 'en_ligne') 
-      ? (apt.zoomLink || teacher.zoomLink || 'https://us05web.zoom.us/j/84920482910?pwd=aymencours') 
+      ? (apt.zoomLink || teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1') 
       : undefined;
 
     const updatedApt: Appointment = {
@@ -936,7 +940,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     playNotificationSound();
 
     const effectiveZoomLink = (apt.type === 'zoom' || apt.type === 'en_ligne') 
-      ? (apt.zoomLink || teacher.zoomLink || 'https://us05web.zoom.us/j/84920482910?pwd=aymencours') 
+      ? (apt.zoomLink || teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1') 
       : undefined;
 
     const zoomText = (apt.type === 'zoom' || apt.type === 'en_ligne') ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';

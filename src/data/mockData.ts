@@ -65,12 +65,12 @@ export const INITIAL_TEACHER: TeacherProfile = {
   rating: 4.98,
   reviewCount: 142,
   location: 'En Ligne (Visio / Téléphone)',
-  phone: '06 50 20 30 40',
+  phone: '06 13 92 09 87',
   email: 'contact@cours-aymen.fr',
   bio: 'Bienvenue ! Je donne des cours particuliers de Coran dans la bienveillance, la patience et le respect du rythme de chacun. Apprentissage de la lecture pas à pas, perfectionnement de la récitation (Tajwid) et mémorisation. Les cours se font en ligne (très simple sur smartphone ou ordinateur).',
   languages: ['Français', 'Arabe'],
   avatarUrl: '',
-  zoomLink: 'https://us05web.zoom.us/j/84920482910?pwd=aymencours',
+  zoomLink: 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1',
   lessons: [
     {
       title: 'Lecture & Récitation du Coran (Tajwid pas à pas)',

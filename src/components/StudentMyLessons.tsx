@@ -401,13 +401,13 @@ export const StudentMyLessons: React.FC = () => {
                       <div>
                         <div style={{ fontWeight: 800, color: '#1E40AF' }}>Salle de cours Zoom :</div>
                         <div style={{ fontSize: '0.8rem', color: '#3B82F6', wordBreak: 'break-all' }}>
-                          {apt.zoomLink || 'https://us05web.zoom.us/j/84920482910?pwd=aymencours'}
+                          {apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}
                         </div>
                       </div>
                     </div>
 
                     <a
-                      href={apt.zoomLink || 'https://us05web.zoom.us/j/84920482910?pwd=aymencours'}
+                      href={apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}
                       target="_blank"
                       rel="noreferrer"
                       className="btn"

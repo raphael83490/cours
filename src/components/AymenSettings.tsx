@@ -10,7 +10,7 @@ export const AymenSettings: React.FC = () => {
   const [phone, setPhone] = useState(teacher.phone);
   const [location, setLocation] = useState(teacher.location);
   const [bio, setBio] = useState(teacher.bio);
-  const [zoomLink, setZoomLink] = useState(teacher.zoomLink || 'https://us05web.zoom.us/j/84920482910?pwd=aymencours');
+  const [zoomLink, setZoomLink] = useState(teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1');
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
