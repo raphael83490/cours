@@ -3,13 +3,24 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
+import QRCode from 'qrcode';
 
 dotenv.config();
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception:', err.message || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Unhandled Rejection:', reason);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS for Netlify, local dev, and all web clients
+// Enable CORS for Netlify and all origins
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -28,7 +39,7 @@ const APPOINTMENTS_FILE = path.join(DATA_DIR, 'appointments.json');
 const AVAILABILITY_FILE = path.join(DATA_DIR, 'availability.json');
 const LOGS_FILE = path.join(DATA_DIR, 'activity.log');
 
-// Helper to log server activity
+// Log file for outbound activity
 function logActivity(message) {
   const timestamp = new Date().toISOString();
   const line = `[${timestamp}] ${message}\n`;
@@ -56,12 +67,10 @@ const DEFAULT_APPOINTMENTS = [
   }
 ];
 
-// Load appointments
 function loadAppointments() {
   try {
     if (fs.existsSync(APPOINTMENTS_FILE)) {
-      const content = fs.readFileSync(APPOINTMENTS_FILE, 'utf8');
-      return JSON.parse(content);
+      return JSON.parse(fs.readFileSync(APPOINTMENTS_FILE, 'utf8'));
     }
   } catch (err) {
     console.error('Erreur lecture appointments.json:', err);
@@ -69,7 +78,6 @@ function loadAppointments() {
   return DEFAULT_APPOINTMENTS;
 }
 
-// Save appointments
 function saveAppointments(data) {
   try {
     fs.writeFileSync(APPOINTMENTS_FILE, JSON.stringify(data, null, 2), 'utf8');
@@ -80,7 +88,6 @@ function saveAppointments(data) {
   }
 }
 
-// Load availability
 function loadAvailability() {
   try {
     if (fs.existsSync(AVAILABILITY_FILE)) {
@@ -92,7 +99,6 @@ function loadAvailability() {
   return { customDateSlots: {}, blockedDates: [] };
 }
 
-// Save availability
 function saveAvailability(data) {
   try {
     fs.writeFileSync(AVAILABILITY_FILE, JSON.stringify(data, null, 2), 'utf8');
@@ -107,6 +113,134 @@ let appointments = loadAppointments();
 let availability = loadAvailability();
 
 // ==========================================
+// 🟢 WHATSAPP CLIENT CONFIGURATION
+// ==========================================
+let qrCodeDataUrl = null;
+let isWhatsAppReady = false;
+let isInitializing = false;
+let whatsappUser = null;
+let lastError = null;
+
+let whatsappClient = null;
+
+function initWhatsAppClient() {
+  isInitializing = true;
+  isWhatsAppReady = false;
+  qrCodeDataUrl = null;
+  lastError = null;
+
+  try {
+    whatsappClient = new Client({
+      authStrategy: new LocalAuth({
+        dataPath: path.resolve(process.cwd(), '.wwebjs_auth')
+      }),
+      puppeteer: {
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      }
+    });
+
+    whatsappClient.on('qr', async (qr) => {
+      isWhatsAppReady = false;
+      lastError = null;
+      console.log('\n[WhatsApp] 📱 Nouveau QR Code généré');
+
+      try {
+        qrCodeDataUrl = await QRCode.toDataURL(qr, {
+          width: 320,
+          margin: 2,
+          color: { dark: '#064E3B', light: '#FFFFFF' }
+        });
+      } catch (err) {
+        console.error('Erreur génération QR Code DataURL:', err);
+      }
+    });
+
+    whatsappClient.on('authenticated', () => {
+      console.log('🔐 [WhatsApp] Session authentifiée avec succès !');
+      lastError = null;
+    });
+
+    whatsappClient.on('ready', () => {
+      isWhatsAppReady = true;
+      qrCodeDataUrl = null;
+      lastError = null;
+      try {
+        whatsappUser = whatsappClient.info ? (whatsappClient.info.pushname || whatsappClient.info.wid?.user) : '06 13 92 09 87';
+      } catch {
+        whatsappUser = '06 13 92 09 87';
+      }
+      console.log(`✅ [WhatsApp] Prêt et connecté sous l'utilisateur : ${whatsappUser}`);
+    });
+
+    whatsappClient.on('auth_failure', (msg) => {
+      console.error('❌ [WhatsApp] Échec d\'authentification:', msg);
+      lastError = 'Échec de l\'authentification WhatsApp. Veuillez réinitialiser.';
+      isWhatsAppReady = false;
+      qrCodeDataUrl = null;
+    });
+
+    whatsappClient.on('disconnected', (reason) => {
+      console.warn('⚠️ [WhatsApp] Déconnecté:', reason);
+      isWhatsAppReady = false;
+      qrCodeDataUrl = null;
+      whatsappUser = null;
+    });
+
+    whatsappClient.initialize().catch((err) => {
+      console.error('Erreur initialisation WhatsApp:', err);
+      lastError = String(err);
+    }).finally(() => {
+      isInitializing = false;
+    });
+
+  } catch (err) {
+    console.error('Erreur création client WhatsApp:', err);
+    lastError = String(err);
+    isInitializing = false;
+  }
+}
+
+// Start WhatsApp on launch
+initWhatsAppClient();
+
+// Helper to send a real WhatsApp message
+async function sendWhatsAppDirect(to, message) {
+  let cleaned = to.replace(/[\s.-]/g, '');
+  if (cleaned.startsWith('0') && cleaned.length === 10) {
+    cleaned = '33' + cleaned.substring(1);
+  } else if (cleaned.startsWith('+')) {
+    cleaned = cleaned.substring(1);
+  }
+
+  const nativeWhatsAppUrl = `https://wa.me/${cleaned}?text=${encodeURIComponent(message)}`;
+
+  if (isWhatsAppReady && whatsappClient) {
+    try {
+      const chatId = `${cleaned}@c.us`;
+      await whatsappClient.sendMessage(chatId, message);
+      logActivity(`Message WhatsApp automatique ENVOYÉ au ${cleaned} : "${message.substring(0, 45)}..."`);
+      return { success: true, isAutoSent: true, nativeWhatsAppUrl, status: 'sent_automatically' };
+    } catch (err) {
+      console.error('Erreur envoi WhatsApp automatique:', err);
+      logActivity(`Erreur envoi WhatsApp à ${cleaned} : ${err.message}`);
+      return { success: true, isAutoSent: false, nativeWhatsAppUrl, status: 'fallback_native_link', error: String(err) };
+    }
+  }
+
+  return { success: true, isAutoSent: false, nativeWhatsAppUrl, status: 'client_not_connected' };
+}
+
+// ==========================================
 // 📡 API ENDPOINTS
 // ==========================================
 
@@ -115,23 +249,72 @@ app.get('/api/health', (req, res) => {
   return res.json({
     status: 'ok',
     uptime: process.uptime(),
+    isWhatsAppReady,
+    whatsappUser,
     totalAppointments: appointments.length,
     pendingAppointments: appointments.filter(a => a.status === 'pending').length,
     timestamp: new Date().toISOString()
   });
 });
 
-// 2. Get all appointments (for Aymen's real-time dashboard)
+// 2. WhatsApp Status & QR Code
+app.get('/api/whatsapp/status', (req, res) => {
+  let statusText = 'En attente de connexion';
+  if (isWhatsAppReady) {
+    statusText = 'Connecté et Prêt';
+  } else if (qrCodeDataUrl) {
+    statusText = 'En attente du scan du QR Code';
+  } else if (isInitializing) {
+    statusText = 'Initialisation en cours...';
+  }
+
+  return res.json({
+    isReady: isWhatsAppReady,
+    isInitializing,
+    qrCodeDataUrl,
+    whatsappUser,
+    statusText,
+    lastError,
+    lastUpdated: new Date().toISOString()
+  });
+});
+
+// 3. Restart WhatsApp Client
+app.post('/api/whatsapp/restart', async (req, res) => {
+  try {
+    if (whatsappClient) {
+      try {
+        await whatsappClient.destroy();
+      } catch {}
+    }
+    initWhatsAppClient();
+    return res.json({ success: true, message: 'Client WhatsApp redémarré.' });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// 4. Send WhatsApp directly via API
+app.post('/api/send-whatsapp', async (req, res) => {
+  const { to, message } = req.body;
+  if (!to || !message) {
+    return res.status(400).json({ error: 'Numéro et message requis' });
+  }
+  const result = await sendWhatsAppDirect(to, message);
+  return res.json(result);
+});
+
+// 5. Get all appointments (for real-time dashboard)
 app.get('/api/appointments', (req, res) => {
   return res.json(appointments);
 });
 
-// 3. Create a new appointment (when student books on the site)
-app.post('/api/appointments', (req, res) => {
+// 6. Create a new appointment
+app.post('/api/appointments', async (req, res) => {
   try {
     const data = req.body;
     if (!data.patientName || !data.patientPhone || !data.date || !data.time) {
-      return res.status(400).json({ error: 'Champs obligatoires manquants (nom, téléphone, date, créneau).' });
+      return res.status(400).json({ error: 'Champs obligatoires manquants.' });
     }
 
     const newApt = {
@@ -150,25 +333,26 @@ app.post('/api/appointments', (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    // Prepend to list
     appointments = [newApt, ...appointments.filter(a => a.id !== newApt.id)];
     saveAppointments(appointments);
 
     logActivity(`Nouvelle réservation reçue : ${newApt.patientName} (${newApt.date} à ${newApt.time})`);
 
+    // Automatic WhatsApp notification to the student if client is connected
+    const confirmMsg = `COURS AYMEN : Salam Aleykoum ${newApt.patientName}, votre demande de cours (${newApt.motif}) pour le ${newApt.date} à ${newApt.time} (Heure de Paris) a bien été reçue par Aymen. Vous recevrez la confirmation et la salle Zoom dès validation.`;
+    sendWhatsAppDirect(newApt.patientPhone, confirmMsg).catch(() => {});
+
     return res.status(201).json({
       success: true,
-      message: 'Réservation transmise à Aymen avec succès.',
       appointment: newApt
     });
   } catch (err) {
-    console.error('Error creating appointment:', err);
-    return res.status(500).json({ error: 'Erreur serveur lors de la création du cours.' });
+    return res.status(500).json({ error: 'Erreur création cours.' });
   }
 });
 
-// 4. Update an appointment (Accept, Counter-proposal, Cancel, etc.)
-app.put('/api/appointments/:id', (req, res) => {
+// 7. Update an appointment (Accept, Counter-proposal, Decline)
+app.put('/api/appointments/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -178,6 +362,7 @@ app.put('/api/appointments/:id', (req, res) => {
       return res.status(404).json({ error: 'Réservation non trouvée.' });
     }
 
+    const previousStatus = appointments[index].status;
     appointments[index] = {
       ...appointments[index],
       ...updates,
@@ -185,74 +370,57 @@ app.put('/api/appointments/:id', (req, res) => {
     };
 
     saveAppointments(appointments);
-    logActivity(`Réservation ${id} mise à jour : statut = ${appointments[index].status}`);
+    const updated = appointments[index];
 
-    return res.json({
-      success: true,
-      appointment: appointments[index]
-    });
+    logActivity(`Réservation ${id} mise à jour : statut = ${updated.status}`);
+
+    // If Aymen just accepted the appointment: send WhatsApp automatically with Zoom link!
+    if (previousStatus !== 'accepted' && updated.status === 'accepted') {
+      const zoomUrl = updated.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1';
+      const msg = `COURS AYMEN : ✅ Salam Aleykoum ${updated.patientName}, Aymen a confirmé votre cours du ${updated.date} à ${updated.time} (Heure de Paris). 🎥 Lien pour rejoindre la salle Zoom : ${zoomUrl}`;
+      sendWhatsAppDirect(updated.patientPhone, msg).catch(() => {});
+    }
+
+    return res.json({ success: true, appointment: updated });
   } catch (err) {
-    console.error('Error updating appointment:', err);
-    return res.status(500).json({ error: 'Erreur serveur lors de la mise à jour.' });
+    return res.status(500).json({ error: 'Erreur mise à jour.' });
   }
 });
 
-// 5. Delete an appointment
+// 8. Delete an appointment
 app.delete('/api/appointments/:id', (req, res) => {
   try {
     const { id } = req.params;
     appointments = appointments.filter(a => a.id !== id);
     saveAppointments(appointments);
-    logActivity(`Réservation ${id} supprimée`);
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur suppression.' });
   }
 });
 
-// 6. Availability endpoints
+// 9. Availability endpoints
 app.get('/api/availability', (req, res) => {
   return res.json(availability);
 });
 
 app.post('/api/availability', (req, res) => {
   try {
-    availability = {
-      ...availability,
-      ...req.body,
-      updatedAt: new Date().toISOString()
-    };
+    availability = { ...availability, ...req.body, updatedAt: new Date().toISOString() };
     saveAvailability(availability);
-    logActivity('Disponibilités mises à jour par Aymen');
     return res.json({ success: true, availability });
   } catch (err) {
-    return res.status(500).json({ error: 'Erreur enregistrement disponibilités.' });
+    return res.status(500).json({ error: 'Erreur disponibilités.' });
   }
-});
-
-// 7. Direct WhatsApp link helper endpoint
-app.post('/api/whatsapp/direct-link', (req, res) => {
-  const { to, message } = req.body;
-  if (!to || !message) {
-    return res.status(400).json({ error: 'Numéro et message requis' });
-  }
-  let clean = to.replace(/[\s.-]/g, '');
-  if (clean.startsWith('0') && clean.length === 10) {
-    clean = '33' + clean.substring(1);
-  } else if (clean.startsWith('+')) {
-    clean = clean.substring(1);
-  }
-  const url = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
-  return res.json({ success: true, url, formattedPhone: clean });
 });
 
 // Fallback route
 app.get('/', (req, res) => {
-  res.send('API Backend Cours Aymen - Opérationnel 🚀');
+  res.send('API Backend Cours Aymen - Synchronisation & WhatsApp Robot Opérationnel 🚀');
 });
 
 // Start listening
 app.listen(PORT, () => {
-  console.log(`\n🚀 Serveur Express démarré sur http://localhost:${PORT}`);
-  console.log(`📡 Synchronisation des réservations et agenda active.`);
+  console.log(`\n🚀 Serveur Express démarré sur le port ${PORT}`);
+  console.log(`📡 Synchronisation des réservations et client WhatsApp actifs.`);
 });

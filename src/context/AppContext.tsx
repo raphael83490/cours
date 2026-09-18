@@ -302,11 +302,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return localStorage.getItem('aymen_backend_url') || (import.meta.env.VITE_API_URL || DEFAULT_RAILWAY_URL).replace(/\/$/, '');
   });
   const [serverStatus, setServerStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
-  const [whatsAppStatus] = useState<WhatsAppStatus | null>({
-    isReady: true,
-    statusText: 'WhatsApp Direct Actif',
-    whatsappUser: '06 13 92 09 87'
-  });
+  const [whatsAppStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
 
   const getEffectiveApiUrl = (): string => {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -384,8 +380,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    syncWithServer();
-    const interval = setInterval(syncWithServer, 3500);
+    const pollAll = async () => {
+      await syncWithServer();
+      const api = getEffectiveApiUrl();
+      try {
+        const res = await fetch(`${api}/api/whatsapp/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isSubscribed) setWhatsAppStatus(data);
+        }
+      } catch {}
+    };
+
+    pollAll();
+    const interval = setInterval(pollAll, 3500);
 
     return () => {
       isSubscribed = false;
@@ -393,17 +401,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [backendUrl]);
 
-  // Compatibility stubs for WhatsApp status
+  // WhatsApp Status polling from backend
   const fetchWhatsAppStatus = async (): Promise<WhatsAppStatus | null> => {
-    return whatsAppStatus;
+    const api = getEffectiveApiUrl();
+    try {
+      const res = await fetch(`${api}/api/whatsapp/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setWhatsAppStatus(data);
+        return data;
+      }
+    } catch {
+      // offline
+    }
+    return null;
   };
 
   const restartWhatsApp = async (): Promise<boolean> => {
-    showToast('WhatsApp Prêt', 'Lien WhatsApp direct 100% actif sans interruption.', 'success');
-    return true;
+    const api = getEffectiveApiUrl();
+    try {
+      const res = await fetch(`${api}/api/whatsapp/restart`, { method: 'POST' });
+      if (res.ok) {
+        showToast('Redémarrage WhatsApp', 'Génération d\'un nouveau QR Code en cours...', 'info');
+        setTimeout(() => fetchWhatsAppStatus(), 1000);
+        return true;
+      }
+    } catch (err) {
+      showToast('Erreur', 'Impossible de redémarrer WhatsApp : ' + String(err), 'error');
+    }
+    return false;
   };
 
-  // 100% Reliable Direct WhatsApp Message Generator
+  // Real WhatsApp Sending via Railway Bot or Direct Link
   const sendRealWhatsApp = async (to: string, message: string): Promise<{ success: boolean; nativeWhatsAppUrl: string; status: string; isAutoSent: boolean }> => {
     let clean = to.replace(/[\s.-]/g, '');
     if (clean.startsWith('0') && clean.length === 10) {
@@ -412,6 +441,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clean = clean.substring(1);
     }
     const nativeWhatsAppUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+
+    const api = getEffectiveApiUrl();
+    try {
+      const res = await fetch(`${api}/api/send-whatsapp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, message })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          success: true,
+          nativeWhatsAppUrl: data.nativeWhatsAppUrl || nativeWhatsAppUrl,
+          status: data.status,
+          isAutoSent: data.isAutoSent || false
+        };
+      }
+    } catch {
+      // fallback
+    }
 
     return {
       success: true,
