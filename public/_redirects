@@ -1,2 +1,5 @@
+# Proxy API requests to Railway backend
+/api/*  https://cours-production-bad7.up.railway.app/api/:splat  200!
+
 # Netlify SPA routing
 /*    /index.html   200

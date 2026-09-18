@@ -18,7 +18,7 @@ export const AymenSettings: React.FC = () => {
   const [location, setLocation] = useState(teacher.location);
   const [bio, setBio] = useState(teacher.bio);
   const [zoomLink, setZoomLink] = useState(teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1');
-  const [railwayUrl, setRailwayUrl] = useState(backendUrl);
+  const [railwayUrl, setRailwayUrl] = useState(backendUrl || 'https://cours-production-bad7.up.railway.app');
   const [isChecking, setIsChecking] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {

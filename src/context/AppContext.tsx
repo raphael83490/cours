@@ -296,8 +296,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ==========================================
   // 🚀 REAL-TIME BACKEND SYNC (Railway & Local)
   // ==========================================
+  const DEFAULT_RAILWAY_URL = 'https://cours-production-bad7.up.railway.app';
+
   const [backendUrl, setBackendUrlState] = useState<string>(() => {
-    return localStorage.getItem('aymen_backend_url') || (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+    return localStorage.getItem('aymen_backend_url') || (import.meta.env.VITE_API_URL || DEFAULT_RAILWAY_URL).replace(/\/$/, '');
   });
   const [serverStatus, setServerStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
   const [whatsAppStatus] = useState<WhatsAppStatus | null>({
@@ -307,13 +309,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const getEffectiveApiUrl = (): string => {
-    if (backendUrl && backendUrl.trim()) {
-      return backendUrl.trim().replace(/\/$/, '');
-    }
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       return 'http://localhost:3001';
     }
-    return '';
+    if (backendUrl && backendUrl.trim()) {
+      return backendUrl.trim().replace(/\/$/, '');
+    }
+    return DEFAULT_RAILWAY_URL;
   };
 
   const updateBackendUrl = (url: string) => {
