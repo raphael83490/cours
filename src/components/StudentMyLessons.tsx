@@ -6,7 +6,6 @@ import {
   Clock, 
   CheckCircle2, 
   AlertCircle, 
-  Smartphone, 
   XCircle, 
   MessageSquare,
   Phone,
@@ -530,20 +529,22 @@ export const StudentMyLessons: React.FC = () => {
                 }}>
                   <button
                     onClick={() => {
+                      const msg = isAccepted
+                        ? `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, votre cours de ${apt.motif} est bien confirmé pour le ${formatDisplayDate(apt.date)} à ${apt.time}. Lien Zoom : ${apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}`
+                        : `COURS AYMEN : Salam Aleykoum ${apt.patientName}, votre demande de cours (${apt.motif}) pour le ${formatDisplayDate(apt.date)} à ${apt.time} est bien reçue par Aymen.`;
                       openSimulatedDelivery({
-                        channel: 'sms',
+                        channel: 'whatsapp',
                         recipientName: apt.patientName,
                         recipientContact: apt.patientPhone,
-                        body: isAccepted
-                          ? `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, votre cours de ${apt.motif} est bien confirmé pour le ${formatDisplayDate(apt.date)} à ${apt.time}.`
-                          : `COURS AYMEN : Salam Aleykoum ${apt.patientName}, votre demande de cours (${apt.motif}) pour le ${formatDisplayDate(apt.date)} à ${apt.time} est bien reçue.`,
-                        badge: 'SMS Reçu sur mobile',
-                        dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time}`
+                        body: msg,
+                        badge: 'Message WhatsApp',
+                        dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time}`,
+                        nativeWhatsAppUrl: `https://wa.me/33613920987?text=${encodeURIComponent(msg)}`
                       });
                     }}
                     className="btn btn-outline btn-sm"
                   >
-                    <Smartphone size={15} /> Voir la notification SMS
+                    <MessageSquare size={15} color="#25D366" /> Voir le message WhatsApp
                   </button>
 
                   {!isCounter && (

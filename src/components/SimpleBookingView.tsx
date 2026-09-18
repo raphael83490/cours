@@ -606,7 +606,7 @@ export const SimpleBookingView: React.FC = () => {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
-                Votre Numéro de Téléphone (pour le SMS) <span style={{ color: '#DC2626' }}>*</span>
+                Votre Numéro de Téléphone (WhatsApp) <span style={{ color: '#DC2626' }}>*</span>
               </label>
               <input
                 type="tel"
@@ -659,10 +659,10 @@ export const SimpleBookingView: React.FC = () => {
             style={{ width: '100%', maxWidth: '480px', margin: '0 auto' }}
           >
             <Send size={20} />
-            {isSubmitting ? 'Envoi du SMS...' : 'Envoyer ma demande de cours à Aymen'}
+            {isSubmitting ? 'Envoi en cours...' : 'Envoyer ma demande de cours à Aymen'}
           </button>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '10px' }}>
-            Aymen recevra votre demande immédiatement et vous confirmera par WhatsApp / SMS (horaires en Heure de Paris).
+            Aymen recevra votre demande immédiatement et vous confirmera par WhatsApp (horaires en Heure de Paris).
           </div>
         </div>
       </form>

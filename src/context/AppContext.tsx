@@ -863,7 +863,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     playNotificationSound();
 
     const modeLabel = data.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
-    const smsBody = `COURS AYMEN : Salam Aleykoum ${data.patientName}, votre demande de cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}) a bien été transmise à Aymen. Vous recevrez la confirmation et le lien dès validation.`;
+    const waBody = `COURS AYMEN : Salam Aleykoum ${data.patientName}, votre demande de cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}) a bien été transmise à Aymen. Vous recevrez la confirmation et le lien dès validation.`;
 
     const aymenWhatsAppDirectUrl = `https://wa.me/33613920987?text=${encodeURIComponent(
       `Salam Aleykoum Aymen, je viens de réserver un cours de ${data.motif} pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}). Mon nom : ${data.patientName}. Merci !`
@@ -873,12 +873,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       channel: 'whatsapp',
       recipientName: 'Aymen (06 13 92 09 87)',
       recipientContact: '06 13 92 09 87',
-      body: smsBody,
+      body: waBody,
       badge: 'Demande transmise directement à Aymen',
       dateInfo: `${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris)`,
-      nativeSmsUrl: `sms:+33613920987?body=${encodeURIComponent(smsBody)}`,
       nativeWhatsAppUrl: aymenWhatsAppDirectUrl,
-      statusInfo: 'Transmis en direct sur l\'application d\'Aymen'
+      statusInfo: 'Transmis en direct sur WhatsApp'
     });
 
     showToast(
@@ -940,24 +939,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isZoom = apt.type === 'zoom' || apt.type === 'en_ligne';
     const modeLabel = isZoom ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
     const zoomText = isZoom ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';
-    const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mode : ${modeLabel}.${zoomText} ${note ? `Note d'Aymen : "${note}"` : ''}`;
+    const waBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mode : ${modeLabel}.${zoomText} ${note ? `Note d'Aymen : "${note}"` : ''}`;
 
     let cleanStudentPhone = apt.patientPhone.replace(/[\s.-]/g, '');
     if (cleanStudentPhone.startsWith('0') && cleanStudentPhone.length === 10) {
       cleanStudentPhone = '33' + cleanStudentPhone.substring(1);
     }
-    const studentWaUrl = `https://wa.me/${cleanStudentPhone}?text=${encodeURIComponent(smsBody)}`;
+    const studentWaUrl = `https://wa.me/${cleanStudentPhone}?text=${encodeURIComponent(waBody)}`;
 
     openSimulatedDelivery({
       channel: 'whatsapp',
       recipientName: apt.patientName,
       recipientContact: apt.patientPhone,
-      body: smsBody,
-      badge: 'Cours Confirmé (WhatsApp & SMS)',
+      body: waBody,
+      badge: 'Cours Confirmé (WhatsApp)',
       dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris)`,
-      nativeSmsUrl: `sms:${cleanStudentPhone.startsWith('33') ? '+' + cleanStudentPhone : cleanStudentPhone}?body=${encodeURIComponent(smsBody)}`,
       nativeWhatsAppUrl: studentWaUrl,
-      statusInfo: 'Confirmation validée sur l\'application'
+      statusInfo: 'Confirmation transmise par WhatsApp'
     });
 
     showToast('Cours validé !', `Le cours avec ${apt.patientName} a été confirmé et enregistré sur l'application.`, 'success');
@@ -1008,24 +1006,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [notifForStudent, ...prev]);
     playNotificationSound();
 
-    const smsBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message d'Aymen : "${message}".`;
+    const waBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message d'Aymen : "${message}".`;
 
     let cleanStudentPhone = apt.patientPhone.replace(/[\s.-]/g, '');
     if (cleanStudentPhone.startsWith('0') && cleanStudentPhone.length === 10) {
       cleanStudentPhone = '33' + cleanStudentPhone.substring(1);
     }
-    const studentWaUrl = `https://wa.me/${cleanStudentPhone}?text=${encodeURIComponent(smsBody)}`;
+    const studentWaUrl = `https://wa.me/${cleanStudentPhone}?text=${encodeURIComponent(waBody)}`;
 
     openSimulatedDelivery({
       channel: 'whatsapp',
       recipientName: apt.patientName,
       recipientContact: apt.patientPhone,
-      body: smsBody,
-      badge: 'Proposition de nouvel horaire',
+      body: waBody,
+      badge: 'Proposition transmise (WhatsApp)',
       dateInfo: `${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris)`,
-      nativeSmsUrl: `sms:${cleanStudentPhone.startsWith('33') ? '+' + cleanStudentPhone : cleanStudentPhone}?body=${encodeURIComponent(smsBody)}`,
       nativeWhatsAppUrl: studentWaUrl,
-      statusInfo: 'Transmis en direct'
+      statusInfo: 'Transmis en direct par WhatsApp'
     });
 
     showToast('Nouvel horaire envoyé', `Votre proposition (${formatDisplayDate(newDate)} à ${newTime} - Heure de Paris) a été enregistrée.`, 'info');

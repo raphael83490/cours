@@ -4,8 +4,7 @@ import {
   X, 
   CheckCheck, 
   ShieldCheck, 
-  Sparkles,
-  Smartphone
+  MessageSquare
 } from 'lucide-react';
 
 export const SmsEmailModal: React.FC = () => {
@@ -54,17 +53,17 @@ export const SmsEmailModal: React.FC = () => {
               width: '30px',
               height: '30px',
               borderRadius: '8px',
-              background: '#047857',
+              background: '#25D366',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Sparkles size={16} />
+              <MessageSquare size={16} color="white" />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Notification SMS Réelle</div>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Notification WhatsApp</div>
               <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                {simulatedDelivery.statusInfo ? `Statut : ${simulatedDelivery.statusInfo}` : 'Aperçu sur smartphone'}
+                {simulatedDelivery.statusInfo ? `Statut : ${simulatedDelivery.statusInfo}` : 'Confirmation WhatsApp'}
               </div>
             </div>
           </div>
@@ -139,7 +138,7 @@ export const SmsEmailModal: React.FC = () => {
               </div>
             </div>
 
-            {/* Action Buttons (WhatsApp & SMS) */}
+            {/* Action Button (WhatsApp) */}
             <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {simulatedDelivery.nativeWhatsAppUrl && (
                 <a
@@ -154,7 +153,7 @@ export const SmsEmailModal: React.FC = () => {
                     color: '#064E3B',
                     fontWeight: 800,
                     fontSize: '0.95rem',
-                    padding: '10px 14px',
+                    padding: '11px 14px',
                     borderRadius: '12px',
                     border: 'none',
                     display: 'flex',
@@ -162,27 +161,8 @@ export const SmsEmailModal: React.FC = () => {
                     gap: '8px'
                   }}
                 >
-                  <span>💬 Ouvrir dans WhatsApp</span>
-                </a>
-              )}
-
-              {simulatedDelivery.nativeSmsUrl && (
-                <a
-                  href={simulatedDelivery.nativeSmsUrl}
-                  className="btn btn-secondary"
-                  style={{
-                    width: '100%',
-                    justifyContent: 'center',
-                    background: 'rgba(255,255,255,0.08)',
-                    borderColor: 'rgba(255,255,255,0.15)',
-                    color: 'white',
-                    fontSize: '0.9rem',
-                    padding: '8px 12px',
-                    borderRadius: '12px'
-                  }}
-                >
-                  <Smartphone size={16} />
-                  📲 Ouvrir dans Messages (SMS Direct)
+                  <MessageSquare size={18} color="#064E3B" />
+                  <span>Ouvrir dans WhatsApp</span>
                 </a>
               )}
             </div>
@@ -199,7 +179,7 @@ export const SmsEmailModal: React.FC = () => {
           justifyContent: 'space-between'
         }}>
           <div style={{ fontSize: '0.8rem', color: '#6EE7B7', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ShieldCheck size={16} /> Notification SMS envoyée
+            <ShieldCheck size={16} /> Notification WhatsApp confirmée
           </div>
           <button
             onClick={closeSimulatedDelivery}
