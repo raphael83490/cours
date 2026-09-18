@@ -3,366 +3,256 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
-import qrcodeTerminal from 'qrcode-terminal';
-import QRCode from 'qrcode';
 
 dotenv.config();
-
-process.on('uncaughtException', (err) => {
-  console.error('⚠️ Uncaught Exception:', err.message || err);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('⚠️ Unhandled Rejection:', reason);
-});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// Enable CORS for Netlify, local dev, and all web clients
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
-// Log file for outbound SMS and WhatsApp history
-const SMS_LOG_PATH = path.resolve(process.cwd(), 'outbound_sms.log');
-const WA_LOG_PATH = path.resolve(process.cwd(), 'outbound_whatsapp.log');
+// Persistent Data Directory
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
-// ==========================================
-// 🟢 WHATSAPP CLIENT CONFIGURATION (100% GRATUIT)
-// ==========================================
-let qrCodeDataUrl = null;
-let qrCodeRaw = null;
-let isWhatsAppReady = false;
-let isInitializing = false;
-let whatsappUser = null;
-let lastError = null;
+const APPOINTMENTS_FILE = path.join(DATA_DIR, 'appointments.json');
+const AVAILABILITY_FILE = path.join(DATA_DIR, 'availability.json');
+const LOGS_FILE = path.join(DATA_DIR, 'activity.log');
 
-const whatsappClient = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: path.resolve(process.cwd(), '.wwebjs_auth')
-  }),
-  puppeteer: {
-    headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu'
-    ]
-  }
-});
-
-// Event: QR Code generated (requires user scanning with phone)
-whatsappClient.on('qr', async (qr) => {
-  qrCodeRaw = qr;
-  isWhatsAppReady = false;
-  lastError = null;
-
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║ 📱 SCANNEZ CE QR CODE AVEC VOTRE APPLICATION WHATSAPP   ║');
-  console.log('║ 1. Ouvrez WhatsApp sur votre téléphone                  ║');
-  console.log('║ 2. Allez dans Réglages > Appareils connectés             ║');
-  console.log('║ 3. Appuyez sur "Connecter un appareil" et scannez ceci   ║');
-  console.log('╚══════════════════════════════════════════════════════════╝\n');
-  
-  qrcodeTerminal.generate(qr, { small: true });
-
+// Helper to log server activity
+function logActivity(message) {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] ${message}\n`;
   try {
-    qrCodeDataUrl = await QRCode.toDataURL(qr, {
-      width: 320,
-      margin: 2,
-      color: {
-        dark: '#064E3B',
-        light: '#FFFFFF'
-      }
-    });
+    fs.appendFileSync(LOGS_FILE, line, 'utf8');
+  } catch {}
+  console.log(line.trim());
+}
+
+// Initial Appointments Seed
+const DEFAULT_APPOINTMENTS = [
+  {
+    id: 'apt-1',
+    patientName: 'Sofiane B.',
+    patientEmail: 'sofiane@exemple.fr',
+    patientPhone: '06 12 34 56 78',
+    motif: 'Lecture & Récitation (Tajwid)',
+    type: 'zoom',
+    zoomLink: 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1',
+    date: new Date().toISOString().split('T')[0],
+    time: '18:00',
+    status: 'pending',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    patientNotes: 'Débutant en récitation, souhaite revoir les règles d\'assimilation.'
+  }
+];
+
+// Load appointments
+function loadAppointments() {
+  try {
+    if (fs.existsSync(APPOINTMENTS_FILE)) {
+      const content = fs.readFileSync(APPOINTMENTS_FILE, 'utf8');
+      return JSON.parse(content);
+    }
   } catch (err) {
-    console.error('Erreur génération QR Code DataURL:', err);
+    console.error('Erreur lecture appointments.json:', err);
   }
-});
+  return DEFAULT_APPOINTMENTS;
+}
 
-// Event: WhatsApp is authenticated
-whatsappClient.on('authenticated', () => {
-  console.log('🔐 Session WhatsApp authentifiée avec succès !');
-  lastError = null;
-});
-
-// Event: WhatsApp client is ready to send messages
-whatsappClient.on('ready', () => {
-  isWhatsAppReady = true;
-  qrCodeDataUrl = null;
-  qrCodeRaw = null;
-  lastError = null;
-
+// Save appointments
+function saveAppointments(data) {
   try {
-    whatsappUser = whatsappClient.info ? (whatsappClient.info.pushname || whatsappClient.info.wid?.user) : 'Connecté';
-  } catch {
-    whatsappUser = 'Connecté';
-  }
-
-  console.log('✅ WHATSAPP WEB CLIENT EST PRÊT ! Les messages automatiques peuvent être envoyés.');
-});
-
-// Event: Auth failure
-whatsappClient.on('auth_failure', (msg) => {
-  console.error('❌ Échec d\'authentification WhatsApp:', msg);
-  isWhatsAppReady = false;
-  lastError = 'Échec d\'authentification: ' + msg;
-});
-
-// Event: Disconnected
-whatsappClient.on('disconnected', (reason) => {
-  console.log('⚠️ WhatsApp Client déconnecté:', reason);
-  isWhatsAppReady = false;
-  whatsappUser = null;
-  lastError = 'Déconnecté: ' + reason;
-});
-
-// Initialize client asynchronously
-async function startWhatsApp() {
-  if (isInitializing) return;
-  isInitializing = true;
-  try {
-    console.log('⏳ Initialisation du client WhatsApp Web...');
-    await whatsappClient.initialize();
+    fs.writeFileSync(APPOINTMENTS_FILE, JSON.stringify(data, null, 2), 'utf8');
+    return true;
   } catch (err) {
-    console.error('❌ Erreur lors du lancement de WhatsApp Client:', err);
-    lastError = String(err);
-  } finally {
-    isInitializing = false;
+    console.error('Erreur écriture appointments.json:', err);
+    return false;
   }
 }
 
-startWhatsApp();
-
-// ==========================================
-// 📡 WHATSAPP API ENDPOINTS
-// ==========================================
-
-// 1. Get WhatsApp connection status and current QR code
-app.get('/api/whatsapp/status', (req, res) => {
-  let statusText = 'En attente de connexion';
-  if (isWhatsAppReady) {
-    statusText = 'Connecté et Prêt';
-  } else if (qrCodeDataUrl) {
-    statusText = 'En attente du scan du QR Code';
-  } else if (isInitializing) {
-    statusText = 'Initialisation en cours...';
+// Load availability
+function loadAvailability() {
+  try {
+    if (fs.existsSync(AVAILABILITY_FILE)) {
+      return JSON.parse(fs.readFileSync(AVAILABILITY_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Erreur lecture availability.json:', err);
   }
+  return { customDateSlots: {}, blockedDates: [] };
+}
 
+// Save availability
+function saveAvailability(data) {
+  try {
+    fs.writeFileSync(AVAILABILITY_FILE, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Erreur écriture availability.json:', err);
+    return false;
+  }
+}
+
+let appointments = loadAppointments();
+let availability = loadAvailability();
+
+// ==========================================
+// 📡 API ENDPOINTS
+// ==========================================
+
+// 1. Health check & status
+app.get('/api/health', (req, res) => {
   return res.json({
-    isReady: isWhatsAppReady,
-    isInitializing,
-    qrCodeDataUrl,
-    whatsappUser,
-    statusText,
-    lastError,
-    lastUpdated: new Date().toISOString()
+    status: 'ok',
+    uptime: process.uptime(),
+    totalAppointments: appointments.length,
+    pendingAppointments: appointments.filter(a => a.status === 'pending').length,
+    timestamp: new Date().toISOString()
   });
 });
 
-// 2. Restart / Reconnect WhatsApp client
-app.post('/api/whatsapp/restart', async (req, res) => {
+// 2. Get all appointments (for Aymen's real-time dashboard)
+app.get('/api/appointments', (req, res) => {
+  return res.json(appointments);
+});
+
+// 3. Create a new appointment (when student books on the site)
+app.post('/api/appointments', (req, res) => {
   try {
-    isWhatsAppReady = false;
-    qrCodeDataUrl = null;
-    try {
-      await whatsappClient.destroy();
-    } catch {}
-    startWhatsApp();
-    return res.json({ success: true, message: 'Redémarrage du client WhatsApp en cours...' });
+    const data = req.body;
+    if (!data.patientName || !data.patientPhone || !data.date || !data.time) {
+      return res.status(400).json({ error: 'Champs obligatoires manquants (nom, téléphone, date, créneau).' });
+    }
+
+    const newApt = {
+      id: data.id || 'apt-' + Date.now(),
+      patientName: data.patientName.trim(),
+      patientEmail: data.patientEmail || '',
+      patientPhone: data.patientPhone.trim(),
+      motif: data.motif || 'Cours particulier',
+      type: data.type || 'zoom',
+      zoomLink: data.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1',
+      date: data.date,
+      time: data.time,
+      status: data.status || 'pending',
+      patientNotes: data.patientNotes || '',
+      createdAt: data.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    // Prepend to list
+    appointments = [newApt, ...appointments.filter(a => a.id !== newApt.id)];
+    saveAppointments(appointments);
+
+    logActivity(`Nouvelle réservation reçue : ${newApt.patientName} (${newApt.date} à ${newApt.time})`);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Réservation transmise à Aymen avec succès.',
+      appointment: newApt
+    });
   } catch (err) {
-    return res.status(500).json({ success: false, error: String(err) });
+    console.error('Error creating appointment:', err);
+    return res.status(500).json({ error: 'Erreur serveur lors de la création du cours.' });
   }
 });
 
-// 3. Send WhatsApp message automatically
-app.post('/api/send-whatsapp', async (req, res) => {
+// 4. Update an appointment (Accept, Counter-proposal, Cancel, etc.)
+app.put('/api/appointments/:id', (req, res) => {
   try {
-    const { to, message } = req.body;
+    const { id } = req.params;
+    const updates = req.body;
 
-    if (!to || !message) {
-      return res.status(400).json({ success: false, error: 'Numéro de téléphone et message requis' });
+    const index = appointments.findIndex(a => a.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Réservation non trouvée.' });
     }
 
-    // Clean phone number (e.g. 06 12 34 56 78 -> 33612345678)
-    let cleaned = to.replace(/[\s.-]/g, '');
-    if (cleaned.startsWith('0') && cleaned.length === 10) {
-      cleaned = '33' + cleaned.substring(1);
-    } else if (cleaned.startsWith('+')) {
-      cleaned = cleaned.substring(1);
-    }
+    appointments[index] = {
+      ...appointments[index],
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
 
-    const chatId = `${cleaned}@c.us`;
-    const timestamp = new Date().toISOString();
-    const encodedBody = encodeURIComponent(message);
-    const nativeWhatsAppUrl = `https://wa.me/${cleaned}?text=${encodedBody}`;
-
-    let dispatchStatus = 'dispatched';
-    let errorDetail = null;
-
-    if (isWhatsAppReady) {
-      try {
-        await whatsappClient.sendMessage(chatId, message);
-        dispatchStatus = 'sent_via_whatsapp_web';
-        console.log(`✅ Message WhatsApp envoyé avec succès au ${cleaned} : "${message.substring(0, 50)}..."`);
-      } catch (err) {
-        console.error('Erreur envoi WhatsApp via client:', err);
-        dispatchStatus = 'error_client_send';
-        errorDetail = String(err);
-      }
-    } else {
-      dispatchStatus = 'client_not_connected_fallback_link';
-    }
-
-    // Append to log file
-    const logEntry = `[${timestamp}] TO: ${cleaned} | STATUS: ${dispatchStatus} | MSG: ${message}\n`;
-    fs.appendFileSync(WA_LOG_PATH, logEntry, 'utf8');
+    saveAppointments(appointments);
+    logActivity(`Réservation ${id} mise à jour : statut = ${appointments[index].status}`);
 
     return res.json({
       success: true,
-      formattedPhone: cleaned,
-      status: dispatchStatus,
-      isAutoSent: dispatchStatus === 'sent_via_whatsapp_web',
-      nativeWhatsAppUrl,
-      errorDetail,
-      timestamp
+      appointment: appointments[index]
     });
-  } catch (error) {
-    console.error('Error in /api/send-whatsapp:', error);
-    return res.status(500).json({ success: false, error: String(error) });
+  } catch (err) {
+    console.error('Error updating appointment:', err);
+    return res.status(500).json({ error: 'Erreur serveur lors de la mise à jour.' });
   }
 });
 
-// 4. WhatsApp logs endpoint
-app.get('/api/whatsapp/logs', (req, res) => {
+// 5. Delete an appointment
+app.delete('/api/appointments/:id', (req, res) => {
   try {
-    if (fs.existsSync(WA_LOG_PATH)) {
-      const logs = fs.readFileSync(WA_LOG_PATH, 'utf8');
-      return res.send(logs);
-    }
-    return res.send('Aucun message WhatsApp envoyé pour le moment.');
-  } catch {
-    return res.status(500).send('Erreur lecture logs WhatsApp.');
+    const { id } = req.params;
+    appointments = appointments.filter(a => a.id !== id);
+    saveAppointments(appointments);
+    logActivity(`Réservation ${id} supprimée`);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erreur suppression.' });
   }
 });
 
-// ==========================================
-// 📱 SMS API ENDPOINTS (Existant conservé)
-// ==========================================
+// 6. Availability endpoints
+app.get('/api/availability', (req, res) => {
+  return res.json(availability);
+});
 
-app.post('/api/send-sms', async (req, res) => {
+app.post('/api/availability', (req, res) => {
   try {
-    const { to, message, smsConfig } = req.body;
-
-    if (!to || !message) {
-      return res.status(400).json({ success: false, error: 'Numéro de téléphone et message requis' });
-    }
-
-    let formattedPhone = to.replace(/[\s.-]/g, '');
-    if (formattedPhone.startsWith('0') && formattedPhone.length === 10) {
-      formattedPhone = '+33' + formattedPhone.substring(1);
-    }
-
-    const timestamp = new Date().toISOString();
-    let dispatchStatus = 'dispatched';
-    let providerUsed = smsConfig?.provider || 'native';
-    let providerResponse = null;
-
-    if (smsConfig?.provider === 'twilio' && smsConfig.twilioAccountSid && smsConfig.twilioAuthToken && smsConfig.twilioFromNumber) {
-      try {
-        const auth = Buffer.from(`${smsConfig.twilioAccountSid}:${smsConfig.twilioAuthToken}`).toString('base64');
-        const params = new URLSearchParams();
-        params.append('To', formattedPhone);
-        params.append('From', smsConfig.twilioFromNumber);
-        params.append('Body', message);
-
-        const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${smsConfig.twilioAccountSid}/Messages.json`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: params
-        });
-
-        const twilioData = await twilioRes.json();
-        if (twilioRes.ok) {
-          dispatchStatus = 'sent_via_twilio';
-          providerResponse = { sid: twilioData.sid, status: twilioData.status };
-        } else {
-          dispatchStatus = 'twilio_error: ' + (twilioData.message || 'Error');
-        }
-      } catch (err) {
-        dispatchStatus = 'twilio_exception: ' + String(err);
-      }
-    } else if (smsConfig?.provider === 'brevo' && smsConfig.brevoApiKey) {
-      try {
-        const brevoRes = await fetch('https://api.brevo.com/v3/transactionalSMS/sms', {
-          method: 'POST',
-          headers: {
-            'api-key': smsConfig.brevoApiKey,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            sender: smsConfig.brevoSender || 'AymenCours',
-            recipient: formattedPhone,
-            content: message,
-            type: 'transactional'
-          })
-        });
-
-        const brevoData = await brevoRes.json();
-        if (brevoRes.ok) {
-          dispatchStatus = 'sent_via_brevo';
-          providerResponse = brevoData;
-        } else {
-          dispatchStatus = 'brevo_error: ' + (brevoData.message || 'Error');
-        }
-      } catch (err) {
-        dispatchStatus = 'brevo_exception: ' + String(err);
-      }
-    }
-
-    const encodedBody = encodeURIComponent(message);
-    const nativeSmsUrl = `sms:${formattedPhone}?&body=${encodedBody}`;
-
-    const logEntry = `[${timestamp}] TO: ${formattedPhone} | STATUS: ${dispatchStatus} | PROVIDER: ${providerUsed} | MSG: ${message}\n`;
-    fs.appendFileSync(SMS_LOG_PATH, logEntry, 'utf8');
-
-    return res.json({
-      success: true,
-      formattedPhone,
-      status: dispatchStatus,
-      provider: providerUsed,
-      providerResponse,
-      nativeSmsUrl,
-      timestamp
-    });
-  } catch (error) {
-    console.error('Error in /api/send-sms:', error);
-    return res.status(500).json({ success: false, error: String(error) });
+    availability = {
+      ...availability,
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    };
+    saveAvailability(availability);
+    logActivity('Disponibilités mises à jour par Aymen');
+    return res.json({ success: true, availability });
+  } catch (err) {
+    return res.status(500).json({ error: 'Erreur enregistrement disponibilités.' });
   }
 });
 
-app.get('/api/sms-logs', (req, res) => {
-  try {
-    if (fs.existsSync(SMS_LOG_PATH)) {
-      const logs = fs.readFileSync(SMS_LOG_PATH, 'utf8');
-      return res.send(logs);
-    }
-    return res.send('Aucun SMS envoyé pour le moment.');
-  } catch {
-    return res.status(500).send('Erreur lecture logs.');
+// 7. Direct WhatsApp link helper endpoint
+app.post('/api/whatsapp/direct-link', (req, res) => {
+  const { to, message } = req.body;
+  if (!to || !message) {
+    return res.status(400).json({ error: 'Numéro et message requis' });
   }
+  let clean = to.replace(/[\s.-]/g, '');
+  if (clean.startsWith('0') && clean.length === 10) {
+    clean = '33' + clean.substring(1);
+  } else if (clean.startsWith('+')) {
+    clean = clean.substring(1);
+  }
+  const url = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  return res.json({ success: true, url, formattedPhone: clean });
 });
 
+// Fallback route
+app.get('/', (req, res) => {
+  res.send('API Backend Cours Aymen - Opérationnel 🚀');
+});
+
+// Start listening
 app.listen(PORT, () => {
-  console.log(`🚀 Serveur Backend SMS & WhatsApp démarré sur le port ${PORT}`);
+  console.log(`\n🚀 Serveur Express démarré sur http://localhost:${PORT}`);
+  console.log(`📡 Synchronisation des réservations et agenda active.`);
 });

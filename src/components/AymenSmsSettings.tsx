@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Smartphone, 
   Send, 
   Save, 
-  CheckCircle2, 
-  AlertCircle,
   RefreshCw,
-  QrCode,
-  MessageSquare
+  MessageSquare,
+  Server,
+  ExternalLink,
+  Wifi,
+  Video,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export const AymenSmsSettings: React.FC = () => {
@@ -16,13 +19,18 @@ export const AymenSmsSettings: React.FC = () => {
     smsConfig, 
     updateSmsConfig, 
     sendRealSms, 
-    fetchWhatsAppStatus, 
-    restartWhatsApp, 
-    whatsAppStatus, 
+    backendUrl,
+    updateBackendUrl,
+    serverStatus,
+    checkServerHealth,
+    teacher,
     showToast 
   } = useApp();
 
-  const [activeSubTab, setActiveSubTab] = useState<'whatsapp' | 'sms'>('whatsapp');
+  const [activeSubTab, setActiveSubTab] = useState<'sync' | 'templates' | 'sms'>('sync');
+  const [urlInput, setUrlInput] = useState(backendUrl);
+  const [isChecking, setIsChecking] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // SMS Configuration State
   const [provider, setProvider] = useState<'native' | 'twilio' | 'brevo'>(smsConfig.provider || 'native');
@@ -32,21 +40,21 @@ export const AymenSmsSettings: React.FC = () => {
   const [brevoApiKey, setBrevoApiKey] = useState(smsConfig.brevoApiKey || '');
   const [brevoSender, setBrevoSender] = useState(smsConfig.brevoSender || 'AymenCours');
 
-  const [isRestartingWa, setIsRestartingWa] = useState(false);
-
   // SMS Testing State
   const [testPhone, setTestPhone] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; nativeSmsUrl?: string } | null>(null);
 
-  // Auto-poll WhatsApp status when WhatsApp tab is active
-  useEffect(() => {
-    fetchWhatsAppStatus();
-    const interval = setInterval(() => {
-      fetchWhatsAppStatus();
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+  const handleSaveBackendUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateBackendUrl(urlInput);
+  };
+
+  const handleTestConnection = async () => {
+    setIsChecking(true);
+    await checkServerHealth();
+    setIsChecking(false);
+  };
 
   const handleSaveSmsConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,13 +68,6 @@ export const AymenSmsSettings: React.FC = () => {
     });
   };
 
-
-  const handleRestartWaClient = async () => {
-    setIsRestartingWa(true);
-    await restartWhatsApp();
-    setIsRestartingWa(false);
-  };
-
   const handleTestSms = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testPhone.trim()) return;
@@ -74,24 +75,31 @@ export const AymenSmsSettings: React.FC = () => {
     setIsTesting(true);
     setTestResult(null);
 
-    const testMessage = `COURS AYMEN : Ceci est un test d'envoi de SMS depuis votre plateforme Cours Aymen.`;
+    const testMessage = `COURS AYMEN : Ceci est un test de message depuis votre plateforme Cours Aymen.`;
 
     try {
       const res = await sendRealSms(testPhone.trim(), testMessage);
       setIsTesting(false);
       setTestResult({
         success: true,
-        message: `SMS généré et envoyé pour le ${testPhone} (Statut: ${res.status}).`,
+        message: `Lien SMS préparé pour le ${testPhone}.`,
         nativeSmsUrl: res.nativeSmsUrl
       });
-      showToast('Test SMS envoyé', `Le SMS a été transmis pour le numéro ${testPhone}.`, 'success');
+      showToast('Test SMS préparé', `Le SMS a été préparé pour le ${testPhone}.`, 'success');
     } catch (err) {
       setIsTesting(false);
       setTestResult({
         success: false,
-        message: 'Erreur lors de l\'envoi : ' + String(err)
+        message: 'Erreur : ' + String(err)
       });
     }
+  };
+
+  const handleCopyZoom = () => {
+    navigator.clipboard.writeText(teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1');
+    setCopiedLink(true);
+    showToast('Lien copié', 'Le lien Zoom permanent a été copié dans le presse-papier.', 'success');
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   return (
@@ -100,15 +108,15 @@ export const AymenSmsSettings: React.FC = () => {
       {/* Subtabs Switcher */}
       <div style={{
         display: 'flex',
+        gap: '8px',
         background: '#E2E8F0',
-        padding: '4px',
+        padding: '5px',
         borderRadius: '14px',
-        gap: '6px',
-        maxWidth: '480px'
+        maxWidth: '650px'
       }}>
         <button
           type="button"
-          onClick={() => setActiveSubTab('whatsapp')}
+          onClick={() => setActiveSubTab('sync')}
           style={{
             flex: 1,
             padding: '10px 16px',
@@ -121,14 +129,39 @@ export const AymenSmsSettings: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            background: activeSubTab === 'whatsapp' ? '#25D366' : 'transparent',
-            color: activeSubTab === 'whatsapp' ? '#064E3B' : '#475569',
-            boxShadow: activeSubTab === 'whatsapp' ? '0 4px 12px rgba(37, 211, 102, 0.3)' : 'none',
+            background: activeSubTab === 'sync' ? '#047857' : 'transparent',
+            color: activeSubTab === 'sync' ? 'white' : '#475569',
+            boxShadow: activeSubTab === 'sync' ? '0 4px 12px rgba(4, 120, 87, 0.3)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <Server size={18} />
+          <span>Synchronisation & Serveur</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('templates')}
+          style={{
+            flex: 1,
+            padding: '10px 16px',
+            borderRadius: '10px',
+            border: 'none',
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            background: activeSubTab === 'templates' ? '#25D366' : 'transparent',
+            color: activeSubTab === 'templates' ? '#064E3B' : '#475569',
+            boxShadow: activeSubTab === 'templates' ? '0 4px 12px rgba(37, 211, 102, 0.3)' : 'none',
             transition: 'all 0.2s'
           }}
         >
           <MessageSquare size={18} />
-          <span>WhatsApp (100% Gratuit)</span>
+          <span>WhatsApp Direct</span>
         </button>
 
         <button
@@ -158,193 +191,235 @@ export const AymenSmsSettings: React.FC = () => {
       </div>
 
       {/* ========================================== */}
-      {/* 🟢 TAB 1: WHATSAPP AUTOMATION BOT (100% GRATUIT) */}
+      {/* 🚀 TAB 1: SYNCHRONISATION EN DIRECT & SERVEUR */}
       {/* ========================================== */}
-      {activeSubTab === 'whatsapp' && (
+      {activeSubTab === 'sync' && (
         <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Card: WhatsApp Status & QR Code */}
           <div className="card" style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  width: '42px',
-                  height: '42px',
+                  width: '46px',
+                  height: '46px',
                   borderRadius: '12px',
-                  background: '#25D366',
+                  background: serverStatus === 'connected' ? '#ECFDF5' : '#FEF2F2',
+                  color: serverStatus === 'connected' ? '#047857' : '#EF4444',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#064E3B'
+                  justifyContent: 'center'
                 }}>
-                  <MessageSquare size={24} />
+                  <Wifi size={24} />
                 </div>
                 <div>
                   <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#064E3B' }}>
-                    Connexion WhatsApp Automatique (100% Gratuit)
+                    Réception des Réservations en Temps Réel
                   </h2>
-                  <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
-                    Connectez votre propre WhatsApp pour envoyer les confirmations de cours automatiquement sans rien payer.
+                  <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                    Dès qu'un élève réserve sur le site, la réservation apparaît immédiatement sur votre tableau de bord.
                   </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleRestartWaClient}
-                disabled={isRestartingWa}
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '0.82rem' }}
-              >
-                <RefreshCw size={14} className={isRestartingWa ? 'animate-spin' : ''} />
-                {isRestartingWa ? 'Redémarrage...' : 'Réinitialiser WhatsApp'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  background: serverStatus === 'connected' ? '#D1FAE5' : '#FEE2E2',
+                  color: serverStatus === 'connected' ? '#065F46' : '#991B1B',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: serverStatus === 'connected' ? '#10B981' : '#EF4444',
+                    display: 'inline-block'
+                  }}></span>
+                  {serverStatus === 'connected' ? 'Connecté & Prêt' : 'En attente de connexion'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={isChecking}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <RefreshCw size={14} className={isChecking ? 'animate-spin' : ''} />
+                  {isChecking ? 'Test en cours...' : 'Tester la connexion'}
+                </button>
+              </div>
             </div>
 
-            {/* STATUS BANNER */}
-            {whatsAppStatus?.isReady ? (
-              <div style={{
-                background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-                border: '2px solid #34D399',
-                borderRadius: '16px',
-                padding: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '16px',
-                boxShadow: '0 4px 16px rgba(52, 211, 153, 0.2)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '50%',
-                    background: '#10B981',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}>
-                    <CheckCircle2 size={28} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#065F46' }}>
-                      🟢 Session WhatsApp Active & Connectée
-                    </div>
-                    <div style={{ fontSize: '0.88rem', color: '#047857', marginTop: '2px' }}>
-                      Utilisateur connecté : <strong>{whatsAppStatus.whatsappUser || 'Votre Compte WhatsApp'}</strong>
-                    </div>
-                    <div style={{ fontSize: '0.82rem', color: '#059669', marginTop: '4px' }}>
-                      ⚡ Vos élèves reçoivent leurs messages WhatsApp instantanément et automatiquement dès qu'un cours est réservé ou validé.
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{
-                    background: '#047857',
-                    color: 'white',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    padding: '6px 12px',
-                    borderRadius: '20px'
-                  }}>
-                    Prêt pour les envois
-                  </span>
-                </div>
+            {/* How it works info card */}
+            <div style={{
+              background: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              borderRadius: '14px',
+              padding: '16px 20px',
+              marginBottom: '24px'
+            }}>
+              <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.98rem', marginBottom: '6px' }}>
+                ⚡ Fonctionnement automatique 24h/24 :
               </div>
-            ) : whatsAppStatus?.qrCodeDataUrl ? (
-              /* QR CODE SCAN VIEW */
-              <div style={{
-                background: '#F8FAFC',
-                border: '2px dashed #94A3B8',
-                borderRadius: '18px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '20px',
-                textAlign: 'center'
-              }}>
-                <div style={{ maxWidth: '520px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <QrCode size={24} color="#047857" />
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#064E3B' }}>
-                      Scannez ce QR Code avec votre téléphone (1 seule fois)
-                    </h3>
-                  </div>
-                  <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                    C'est exactement comme pour vous connecter à WhatsApp Web sur un ordinateur.
-                  </p>
-                </div>
+              <ul style={{ margin: 0, paddingLeft: '20px', color: '#15803D', fontSize: '0.88rem', lineHeight: 1.6 }}>
+                <li>L'élève choisit son créneau sur le planning 14 jours et valide sa demande.</li>
+                <li>Votre espace enseignant reçoit la réservation instantanément avec <strong>sonnerie</strong> et <strong>notification</strong>.</li>
+                <li>Vous pouvez accepter, refuser ou proposer un autre horaire en 1 clic.</li>
+                <li>L'élève peut aussi vous envoyer la confirmation directement sur votre WhatsApp au <strong>06 13 92 09 87</strong>.</li>
+              </ul>
+            </div>
 
-                {/* QR Code Image */}
-                <div style={{
-                  background: 'white',
-                  padding: '16px',
-                  borderRadius: '16px',
-                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                  border: '1px solid #E2E8F0'
-                }}>
-                  <img 
-                    src={whatsAppStatus.qrCodeDataUrl} 
-                    alt="WhatsApp QR Code" 
-                    style={{ width: '240px', height: '240px', display: 'block', borderRadius: '8px' }}
-                  />
-                </div>
+            {/* Backend URL form */}
+            <form onSubmit={handleSaveBackendUrl} style={{ background: '#F8FAFC', padding: '20px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+              <label style={{ display: 'block', fontWeight: 800, color: '#1E293B', marginBottom: '6px', fontSize: '0.95rem' }}>
+                Adresse du Serveur Railway (URL de production) :
+              </label>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                Si vous avez déployé le backend sur Railway, collez ici son URL (ex: <code>https://mon-projet.up.railway.app</code>). En local, le serveur utilise automatiquement <code>http://localhost:3001</code>.
+              </p>
 
-                {/* Instructions steps */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '12px',
-                  width: '100%',
-                  maxWidth: '680px',
-                  textAlign: 'left'
-                }}>
-                  <div style={{ background: 'white', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#047857', marginBottom: '2px' }}>1. Ouvrez WhatsApp</div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sur votre iPhone ou Android</div>
-                  </div>
-                  <div style={{ background: 'white', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#047857', marginBottom: '2px' }}>2. Appareils connectés</div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Allez dans Réglages &gt; Appareils connectés</div>
-                  </div>
-                  <div style={{ background: 'white', padding: '12px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#047857', marginBottom: '2px' }}>3. Scannez le QR Code</div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Pointez l'appareil photo vers l'écran</div>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <input
+                  type="url"
+                  placeholder="https://xxx.up.railway.app"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    minWidth: '260px',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '0.95rem'
+                  }}
+                />
+                <button type="submit" className="btn btn-primary">
+                  <Save size={16} /> Enregistrer l'adresse
+                </button>
               </div>
-            ) : (
-              /* WAITING / INITIALIZING */
-              <div style={{
-                background: '#F8FAFC',
-                borderRadius: '16px',
-                padding: '30px 20px',
-                textAlign: 'center',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <RefreshCw size={32} color="#047857" className="animate-spin" />
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#064E3B' }}>
-                  {whatsAppStatus?.statusText || 'Génération du QR Code de connexion WhatsApp...'}
-                </div>
-                <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: '400px' }}>
-                  Le serveur prépare la session WhatsApp. Le QR Code va s'afficher ici dans quelques instants.
-                </p>
-              </div>
-            )}
+            </form>
+
           </div>
 
         </div>
       )}
 
       {/* ========================================== */}
-      {/* 📱 TAB 2: SMS CONFIGURATION & TESTING */}
+      {/* 🟢 TAB 2: WHATSAPP DIRECT (100% FIABLE) */}
+      {/* ========================================== */}
+      {activeSubTab === 'templates' && (
+        <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          <div className="card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '12px',
+                background: '#25D366',
+                color: '#064E3B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <MessageSquare size={24} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#064E3B' }}>
+                  WhatsApp Direct (06 13 92 09 87)
+                </h2>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                  Connexion directe instantanée sur iPhone, Android et WhatsApp Web sans aucun robot ni risque de déconnexion.
+                </p>
+              </div>
+            </div>
+
+            {/* Permanent Zoom Box */}
+            <div style={{
+              background: '#EFF6FF',
+              border: '1.5px solid #93C5FD',
+              borderRadius: '14px',
+              padding: '18px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, color: '#1E40AF', fontSize: '1rem' }}>
+                  <Video size={18} color="#2563EB" />
+                  Votre Salle Zoom Permanente :
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#3B82F6', wordBreak: 'break-all', marginTop: '4px' }}>
+                  {teacher.zoomLink}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={handleCopyZoom}
+                  className="btn btn-sm"
+                  style={{ background: '#2563EB', color: 'white' }}
+                >
+                  {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedLink ? 'Copié !' : 'Copier le lien'}
+                </button>
+                <a
+                  href={teacher.zoomLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-outline btn-sm"
+                  style={{ borderColor: '#2563EB', color: '#2563EB' }}
+                >
+                  <ExternalLink size={14} /> Tester Zoom
+                </a>
+              </div>
+            </div>
+
+            {/* Test WhatsApp Link Button */}
+            <div style={{ background: '#F8FAFC', padding: '18px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+              <div style={{ fontWeight: 800, color: '#064E3B', fontSize: '0.98rem', marginBottom: '8px' }}>
+                Tester le lien direct WhatsApp :
+              </div>
+              <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                Cliquez ci-dessous pour tester l'ouverture automatique de WhatsApp avec votre numéro configuré :
+              </p>
+
+              <a
+                href={`https://wa.me/33613920987?text=${encodeURIComponent('Test de message direct vers Aymen (06 13 92 09 87) pour les cours de Coran.')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn"
+                style={{
+                  background: '#25D366',
+                  color: '#064E3B',
+                  fontWeight: 800,
+                  fontSize: '0.92rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <MessageSquare size={18} />
+                Ouvrir mon WhatsApp (06 13 92 09 87)
+              </a>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* 📱 TAB 3: SMS CLASSIQUE */}
       {/* ========================================== */}
       {activeSubTab === 'sms' && (
         <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -357,134 +432,71 @@ export const AymenSmsSettings: React.FC = () => {
               </h2>
             </div>
             <p style={{ fontSize: '0.92rem', color: 'var(--text-muted)' }}>
-              Choisissez comment vous souhaitez expédier les SMS à vos élèves (envoi direct depuis votre smartphone ou via API Twilio/Brevo).
+              Par défaut, les liens SMS ouvrent directement l'application Messages de votre smartphone. Vous pouvez aussi relier une API Twilio ou Brevo.
             </p>
 
-            {/* Provider Choice */}
-            <form onSubmit={handleSaveSmsConfig} style={{ marginTop: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                
-                {/* Option 1 : Native Direct */}
-                <div
-                  onClick={() => setProvider('native')}
-                  style={{
-                    padding: '16px',
-                    borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${provider === 'native' ? '#047857' : '#E2E8F0'}`,
-                    background: provider === 'native' ? '#F0FDF4' : 'white',
-                    cursor: 'pointer'
-                  }}
+            <form onSubmit={handleSaveSmsConfig} style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, color: '#1E293B', marginBottom: '6px' }}>
+                  Mode d'envoi :
+                </label>
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as any)}
+                  style={{ width: '100%', maxWidth: '400px', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1' }}
                 >
-                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#064E3B', marginBottom: '4px' }}>
-                    📲 Envoi Direct Mobile (Gratuit)
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    Ouvre l'application SMS de votre téléphone avec le message prêt.
-                  </div>
-                </div>
-
-                {/* Option 2 : Twilio */}
-                <div
-                  onClick={() => setProvider('twilio')}
-                  style={{
-                    padding: '16px',
-                    borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${provider === 'twilio' ? '#047857' : '#E2E8F0'}`,
-                    background: provider === 'twilio' ? '#F0FDF4' : 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#064E3B', marginBottom: '4px' }}>
-                    ⚡ API Twilio (Automatique)
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    Envoi 100% en tâche de fond avec votre compte Twilio.
-                  </div>
-                </div>
-
-                {/* Option 3 : Brevo */}
-                <div
-                  onClick={() => setProvider('brevo')}
-                  style={{
-                    padding: '16px',
-                    borderRadius: 'var(--radius-md)',
-                    border: `2px solid ${provider === 'brevo' ? '#047857' : '#E2E8F0'}`,
-                    background: provider === 'brevo' ? '#F0FDF4' : 'white',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#064E3B', marginBottom: '4px' }}>
-                    ⚡ API Brevo / Sendinblue
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    Envoi automatique de SMS transactionnels via votre clé Brevo.
-                  </div>
-                </div>
+                  <option value="native">Lien direct smartphone (100% gratuit via votre forfait)</option>
+                  <option value="twilio">Passerelle Twilio (API)</option>
+                  <option value="brevo">Passerelle Brevo / Sendinblue (API)</option>
+                </select>
               </div>
 
-              {/* Twilio fields */}
               {provider === 'twilio' && (
-                <div className="animate-slide-up" style={{ background: '#F8FAFC', padding: '18px', borderRadius: '8px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '4px' }}>Twilio Account SID</label>
-                    <input
-                      type="text"
-                      placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                      value={twilioAccountSid}
-                      onChange={(e) => setTwilioAccountSid(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '4px' }}>Twilio Auth Token</label>
-                    <input
-                      type="password"
-                      placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                      value={twilioAuthToken}
-                      onChange={(e) => setTwilioAuthToken(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '4px' }}>Numéro Twilio Expéditeur (From Number)</label>
-                    <input
-                      type="text"
-                      placeholder="+1xxxxxxxxxx ou +33xxxxxxxx"
-                      value={twilioFromNumber}
-                      onChange={(e) => setTwilioFromNumber(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#F8FAFC', padding: '16px', borderRadius: '12px' }}>
+                  <input
+                    type="text"
+                    placeholder="Twilio Account SID"
+                    value={twilioAccountSid}
+                    onChange={(e) => setTwilioAccountSid(e.target.value)}
+                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Twilio Auth Token"
+                    value={twilioAuthToken}
+                    onChange={(e) => setTwilioAuthToken(e.target.value)}
+                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Numéro expéditeur Twilio (+33...)"
+                    value={twilioFromNumber}
+                    onChange={(e) => setTwilioFromNumber(e.target.value)}
+                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                  />
                 </div>
               )}
 
-              {/* Brevo fields */}
               {provider === 'brevo' && (
-                <div className="animate-slide-up" style={{ background: '#F8FAFC', padding: '18px', borderRadius: '8px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '4px' }}>Clé API Brevo (v3 API-key)</label>
-                    <input
-                      type="password"
-                      placeholder="xkeysib-xxxxxxxxxxxxxxxxxxxxxxxx"
-                      value={brevoApiKey}
-                      onChange={(e) => setBrevoApiKey(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '4px' }}>Nom d'expéditeur (ex: AymenCours, max 11 caractères)</label>
-                    <input
-                      type="text"
-                      placeholder="AymenCours"
-                      value={brevoSender}
-                      onChange={(e) => setBrevoSender(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
-                    />
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#F8FAFC', padding: '16px', borderRadius: '12px' }}>
+                  <input
+                    type="password"
+                    placeholder="Clé API Brevo (xkeysib-...)"
+                    value={brevoApiKey}
+                    onChange={(e) => setBrevoApiKey(e.target.value)}
+                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Nom expéditeur (ex: AymenCours)"
+                    value={brevoSender}
+                    onChange={(e) => setBrevoSender(e.target.value)}
+                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                  />
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <div>
                 <button type="submit" className="btn btn-primary">
                   <Save size={16} /> Enregistrer la configuration SMS
                 </button>
@@ -492,63 +504,55 @@ export const AymenSmsSettings: React.FC = () => {
             </form>
           </div>
 
-          {/* Test Live SMS Form */}
+          {/* Test SMS Box */}
           <div className="card" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#064E3B', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Send size={18} color="#047857" /> Tester l'envoi d'un SMS réel
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#064E3B', marginBottom: '8px' }}>
+              Tester la préparation d'un SMS
             </h3>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Saisissez votre numéro de portable pour vérifier la bonne réception du SMS.
-            </p>
-
-            <form onSubmit={handleTestSms} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+            <form onSubmit={handleTestSms} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <input
                 type="tel"
-                required
                 placeholder="Ex: 06 12 34 56 78"
                 value={testPhone}
                 onChange={(e) => setTestPhone(e.target.value)}
-                style={{ flex: 1, minWidth: '220px', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '1rem' }}
+                style={{ flex: 1, minWidth: '220px', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1' }}
               />
-
               <button type="submit" disabled={isTesting} className="btn btn-primary">
-                <Send size={16} /> {isTesting ? 'Envoi...' : 'Envoyer le SMS de test'}
+                <Send size={16} /> {isTesting ? 'Préparation...' : 'Tester le SMS'}
               </button>
             </form>
 
             {testResult && (
               <div style={{
-                padding: '14px',
+                marginTop: '14px',
+                padding: '12px 16px',
                 borderRadius: '8px',
-                background: testResult.success ? '#F0FDF4' : '#FEF2F2',
-                border: `1.5px solid ${testResult.success ? '#86EFAC' : '#FCA5A5'}`,
+                background: testResult.success ? '#ECFDF5' : '#FEF2F2',
+                color: testResult.success ? '#065F46' : '#991B1B',
+                fontSize: '0.9rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: '10px'
+                gap: '8px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', color: testResult.success ? '#166534' : '#991B1B' }}>
-                  {testResult.success ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-                  <span>{testResult.message}</span>
-                </div>
-
+                <span>{testResult.message}</span>
                 {testResult.nativeSmsUrl && (
                   <a
                     href={testResult.nativeSmsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-primary btn-sm"
-                    style={{ fontSize: '0.82rem' }}
+                    className="btn btn-sm"
+                    style={{ background: '#047857', color: 'white' }}
                   >
-                    📲 Ouvrir dans Messages (SMS Direct)
+                    Ouvrir dans Messages
                   </a>
                 )}
               </div>
             )}
           </div>
+
         </div>
       )}
+
     </div>
   );
 };

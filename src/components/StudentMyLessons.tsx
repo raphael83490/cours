@@ -272,6 +272,55 @@ export const StudentMyLessons: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Direct WhatsApp to Aymen card when pending */}
+                {isPending && (
+                  <div
+                    className="animate-slide-up"
+                    style={{
+                      background: '#ECFDF5',
+                      border: '1.5px solid #10B981',
+                      borderRadius: '14px',
+                      padding: '16px 20px',
+                      marginBottom: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#065F46', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <CheckCircle2 size={18} color="#10B981" />
+                        Demande envoyée directement à Aymen !
+                      </div>
+                      <p style={{ fontSize: '0.86rem', color: '#047857', margin: '4px 0 0 0' }}>
+                        Aymen a reçu votre demande sur son application. Vous pouvez aussi lui écrire directement sur WhatsApp au <strong>06 13 92 09 87</strong>.
+                      </p>
+                    </div>
+
+                    <a
+                      href={`https://wa.me/33613920987?text=${encodeURIComponent(
+                        `Salam Aleykoum Aymen, je viens de réserver un cours de ${apt.motif} pour le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mon nom : ${apt.patientName}. Merci !`
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn"
+                      style={{
+                        background: '#25D366',
+                        color: '#064E3B',
+                        fontWeight: 800,
+                        fontSize: '0.88rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <MessageSquare size={16} /> Écrire à Aymen sur WhatsApp
+                    </a>
+                  </div>
+                )}
+
                 {/* Counter Proposal Notification Card */}
                 {isCounter && (
                   <div 

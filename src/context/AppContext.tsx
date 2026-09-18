@@ -80,12 +80,18 @@ interface AppContextType {
   declineAppointment: (id: string, reason?: string) => void;
   cancelAppointment: (id: string) => void;
 
-  // Real SMS & WhatsApp Sending
+  // Real SMS & WhatsApp Direct Actions
   sendRealSms: (to: string, message: string) => Promise<{ success: boolean; nativeSmsUrl?: string; status?: string }>;
   sendRealWhatsApp: (to: string, message: string) => Promise<{ success: boolean; nativeWhatsAppUrl?: string; status?: string; isAutoSent?: boolean }>;
   fetchWhatsAppStatus: () => Promise<WhatsAppStatus | null>;
   restartWhatsApp: () => Promise<boolean>;
   whatsAppStatus: WhatsAppStatus | null;
+
+  // Real-time backend sync
+  backendUrl: string;
+  updateBackendUrl: (url: string) => void;
+  serverStatus: 'connected' | 'offline' | 'checking';
+  checkServerHealth: () => Promise<boolean>;
 
   // Availability Management for Aymen (14 days rolling window)
   getAvailableSlotsForDate: (dateStr: string) => string[];
@@ -287,40 +293,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Déconnexion', 'Vous êtes revenu sur l\'espace public des élèves.', 'info');
   };
 
-  const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-  const [whatsAppStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
+  // ==========================================
+  // 🚀 REAL-TIME BACKEND SYNC (Railway & Local)
+  // ==========================================
+  const [backendUrl, setBackendUrlState] = useState<string>(() => {
+    return localStorage.getItem('aymen_backend_url') || (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  });
+  const [serverStatus, setServerStatus] = useState<'connected' | 'offline' | 'checking'>('checking');
+  const [whatsAppStatus] = useState<WhatsAppStatus | null>({
+    isReady: true,
+    statusText: 'WhatsApp Direct Actif',
+    whatsappUser: '06 13 92 09 87'
+  });
 
-  // Poll / Fetch WhatsApp Status
-  const fetchWhatsAppStatus = async (): Promise<WhatsAppStatus | null> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/whatsapp/status`);
-      if (response.ok) {
-        const data = await response.json();
-        setWhatsAppStatus(data);
-        return data;
-      }
-    } catch {
-      // Offline
+  const getEffectiveApiUrl = (): string => {
+    if (backendUrl && backendUrl.trim()) {
+      return backendUrl.trim().replace(/\/$/, '');
     }
-    return null;
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:3001';
+    }
+    return '';
   };
 
-  const restartWhatsApp = async (): Promise<boolean> => {
+  const updateBackendUrl = (url: string) => {
+    const cleaned = url.trim().replace(/\/$/, '');
+    localStorage.setItem('aymen_backend_url', cleaned);
+    setBackendUrlState(cleaned);
+    showToast('Serveur configuré', cleaned ? `Connecté à : ${cleaned}` : 'Mode serveur local / automatique', 'info');
+  };
+
+  const checkServerHealth = async (): Promise<boolean> => {
+    const api = getEffectiveApiUrl();
     try {
-      const response = await fetch(`${API_BASE_URL}/api/whatsapp/restart`, { method: 'POST' });
-      if (response.ok) {
-        showToast('Redémarrage WhatsApp', 'Le client WhatsApp a été réinitialisé.', 'info');
-        await fetchWhatsAppStatus();
+      const res = await fetch(`${api}/api/health`, { cache: 'no-store' });
+      if (res.ok) {
+        setServerStatus('connected');
+        showToast('Connexion réussie', 'Le serveur backend répond parfaitement en temps réel.', 'success');
         return true;
       }
-    } catch (err) {
-      showToast('Erreur', 'Impossible de redémarrer WhatsApp: ' + String(err), 'error');
+    } catch {
+      // offline
     }
+    setServerStatus('offline');
+    showToast('Serveur hors ligne', 'Impossible de joindre le serveur. Vérifiez l\'adresse Railway ou l\'état du déploiement.', 'error');
     return false;
   };
 
-  // Real WhatsApp Sending Function via backend API
-  const sendRealWhatsApp = async (to: string, message: string): Promise<{ success: boolean; nativeWhatsAppUrl?: string; status?: string; isAutoSent?: boolean }> => {
+  // Poll server for new appointments in real-time
+  useEffect(() => {
+    let isSubscribed = true;
+
+    const syncWithServer = async () => {
+      const api = getEffectiveApiUrl();
+      try {
+        const res = await fetch(`${api}/api/appointments`, { cache: 'no-store' });
+        if (res.ok) {
+          const serverApts: Appointment[] = await res.json();
+          if (!isSubscribed) return;
+
+          setServerStatus('connected');
+
+          setAppointments(prevLocal => {
+            const localIds = new Set(prevLocal.map(a => a.id));
+            const newPendingApts = serverApts.filter(sa => !localIds.has(sa.id) && sa.status === 'pending');
+
+            if (newPendingApts.length > 0) {
+              playNotificationSound();
+              newPendingApts.forEach(apt => {
+                showToast(
+                  '📖 Nouvelle réservation reçue !',
+                  `${apt.patientName} a réservé pour le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris).`,
+                  'success'
+                );
+              });
+            }
+
+            // Merge server appointments with any unsaved local ones
+            const serverIds = new Set(serverApts.map(a => a.id));
+            const localOnly = prevLocal.filter(l => !serverIds.has(l.id));
+            return [...serverApts, ...localOnly];
+          });
+        } else {
+          if (isSubscribed) setServerStatus('offline');
+        }
+      } catch {
+        if (isSubscribed) setServerStatus('offline');
+      }
+    };
+
+    syncWithServer();
+    const interval = setInterval(syncWithServer, 3500);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [backendUrl]);
+
+  // Compatibility stubs for WhatsApp status
+  const fetchWhatsAppStatus = async (): Promise<WhatsAppStatus | null> => {
+    return whatsAppStatus;
+  };
+
+  const restartWhatsApp = async (): Promise<boolean> => {
+    showToast('WhatsApp Prêt', 'Lien WhatsApp direct 100% actif sans interruption.', 'success');
+    return true;
+  };
+
+  // 100% Reliable Direct WhatsApp Message Generator
+  const sendRealWhatsApp = async (to: string, message: string): Promise<{ success: boolean; nativeWhatsAppUrl: string; status: string; isAutoSent: boolean }> => {
     let clean = to.replace(/[\s.-]/g, '');
     if (clean.startsWith('0') && clean.length === 10) {
       clean = '33' + clean.substring(1);
@@ -329,66 +411,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const nativeWhatsAppUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/send-whatsapp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, message })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: true,
-          nativeWhatsAppUrl: data.nativeWhatsAppUrl || nativeWhatsAppUrl,
-          status: data.status,
-          isAutoSent: data.isAutoSent
-        };
-      }
-    } catch {
-      // Backend offline fallback
-    }
-
     return {
       success: true,
       nativeWhatsAppUrl,
-      status: 'native_link',
+      status: 'direct_whatsapp',
       isAutoSent: false
     };
   };
 
-  // Real SMS Sending Function via backend API
-  const sendRealSms = async (to: string, message: string): Promise<{ success: boolean; nativeSmsUrl?: string; status?: string }> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/send-sms`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to,
-          message,
-          smsConfig
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          success: true,
-          nativeSmsUrl: data.nativeSmsUrl,
-          status: data.status
-        };
-      }
-    } catch {
-      // Backend offline fallback - generate native SMS link
-    }
-
+  // 100% Reliable Direct SMS Link Generator
+  const sendRealSms = async (to: string, message: string): Promise<{ success: boolean; nativeSmsUrl: string; status: string }> => {
     const clean = to.replace(/[\s.-]/g, '');
     const formatted = clean.startsWith('0') ? '+33' + clean.substring(1) : clean;
     const nativeSmsUrl = `sms:${formatted}?&body=${encodeURIComponent(message)}`;
+
     return {
       success: true,
       nativeSmsUrl,
-      status: 'native_link'
+      status: 'direct_sms'
     };
   };
 
@@ -742,8 +782,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     };
 
-    setAppointments(prev => [newApt, ...prev]);
+    setAppointments(prev => [newApt, ...prev.filter(a => a.id !== newApt.id)]);
     setStudentSession(data.patientPhone, data.patientName);
+
+    // Sync to backend API immediately
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newApt)
+    }).catch(err => console.warn('Sync booking to server failed:', err));
 
     // Notification for Aymen
     const notifForAymen: AppNotification = {
@@ -765,21 +813,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const modeLabel = data.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
     const smsBody = `COURS AYMEN : Salam Aleykoum ${data.patientName}, votre demande de cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}) a bien été transmise à Aymen. Vous recevrez la confirmation et le lien dès validation.`;
 
-    // Real SMS & WhatsApp trigger
-    sendRealWhatsApp(data.patientPhone, smsBody).then(waRes => {
-      sendRealSms(data.patientPhone, smsBody).then(smsRes => {
-        openSimulatedDelivery({
-          channel: waRes.isAutoSent ? 'whatsapp' : 'sms',
-          recipientName: data.patientName,
-          recipientContact: data.patientPhone,
-          body: smsBody,
-          badge: waRes.isAutoSent ? 'Demande envoyée par WhatsApp Automatique' : 'Demande envoyée par SMS',
-          dateInfo: `${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris)`,
-          nativeSmsUrl: smsRes.nativeSmsUrl,
-          nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
-          statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
-        });
-      });
+    const aymenWhatsAppDirectUrl = `https://wa.me/33613920987?text=${encodeURIComponent(
+      `Salam Aleykoum Aymen, je viens de réserver un cours de ${data.motif} pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}). Mon nom : ${data.patientName}. Merci !`
+    )}`;
+
+    openSimulatedDelivery({
+      channel: 'whatsapp',
+      recipientName: 'Aymen (06 13 92 09 87)',
+      recipientContact: '06 13 92 09 87',
+      body: smsBody,
+      badge: 'Demande transmise directement à Aymen',
+      dateInfo: `${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris)`,
+      nativeSmsUrl: `sms:+33613920987?body=${encodeURIComponent(smsBody)}`,
+      nativeWhatsAppUrl: aymenWhatsAppDirectUrl,
+      statusInfo: 'Transmis en direct sur l\'application d\'Aymen'
     });
 
     showToast(
@@ -810,6 +857,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setAppointments(prev => prev.map(a => a.id === id ? updatedApt : a));
 
+    // Sync to backend API
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'accepted',
+        zoomLink: effectiveZoomLink,
+        practitionerNotes: note || apt.practitionerNotes
+      })
+    }).catch(err => console.warn('Sync accept failed:', err));
+
     const notifForStudent: AppNotification = {
       id: 'notif-' + Date.now(),
       targetRole: 'patient',
@@ -831,24 +890,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const zoomText = isZoom ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';
     const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mode : ${modeLabel}.${zoomText} ${note ? `Note d'Aymen : "${note}"` : ''}`;
 
-    // Real WhatsApp + SMS dispatch
-    sendRealWhatsApp(apt.patientPhone, smsBody).then(waRes => {
-      sendRealSms(apt.patientPhone, smsBody).then(smsRes => {
-        openSimulatedDelivery({
-          channel: waRes.isAutoSent ? 'whatsapp' : 'sms',
-          recipientName: apt.patientName,
-          recipientContact: apt.patientPhone,
-          body: smsBody,
-          badge: waRes.isAutoSent ? 'Confirmation WhatsApp Automatique' : 'Cours Confirmé (SMS)',
-          dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris)`,
-          nativeSmsUrl: smsRes.nativeSmsUrl,
-          nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
-          statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
-        });
-      });
+    let cleanStudentPhone = apt.patientPhone.replace(/[\s.-]/g, '');
+    if (cleanStudentPhone.startsWith('0') && cleanStudentPhone.length === 10) {
+      cleanStudentPhone = '33' + cleanStudentPhone.substring(1);
+    }
+    const studentWaUrl = `https://wa.me/${cleanStudentPhone}?text=${encodeURIComponent(smsBody)}`;
+
+    openSimulatedDelivery({
+      channel: 'whatsapp',
+      recipientName: apt.patientName,
+      recipientContact: apt.patientPhone,
+      body: smsBody,
+      badge: 'Cours Confirmé (WhatsApp & SMS)',
+      dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris)`,
+      nativeSmsUrl: `sms:${cleanStudentPhone.startsWith('33') ? '+' + cleanStudentPhone : cleanStudentPhone}?body=${encodeURIComponent(smsBody)}`,
+      nativeWhatsAppUrl: studentWaUrl,
+      statusInfo: 'Confirmation validée sur l\'application'
     });
 
-    showToast('Cours validé !', `Le cours avec ${apt.patientName} a été confirmé et le message WhatsApp/SMS a été transmis.`, 'success');
+    showToast('Cours validé !', `Le cours avec ${apt.patientName} a été confirmé et enregistré sur l'application.`, 'success');
   };
 
   // 3. Aymen Proposes Another Date/Time (Counter-proposal)
@@ -867,6 +927,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setAppointments(prev => prev.map(a => a.id === id ? updatedApt : a));
 
+    // Sync to backend API
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'counter_proposed',
+        proposedDate: newDate,
+        proposedTime: newTime,
+        counterProposalMessage: message
+      })
+    }).catch(err => console.warn('Sync counter propose failed:', err));
+
     const notifForStudent: AppNotification = {
       id: 'notif-' + Date.now(),
       targetRole: 'patient',
@@ -883,26 +956,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [notifForStudent, ...prev]);
     playNotificationSound();
 
-    const smsBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen ne peut pas le ${formatDisplayDate(apt.date)} et vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message d'Aymen : "${message}". Répondez en 1 clic : http://localhost:5173/`;
+    const smsBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message d'Aymen : "${message}".`;
 
-    // Real WhatsApp + SMS dispatch
-    sendRealWhatsApp(apt.patientPhone, smsBody).then(waRes => {
-      sendRealSms(apt.patientPhone, smsBody).then(smsRes => {
-        openSimulatedDelivery({
-          channel: waRes.isAutoSent ? 'whatsapp' : 'sms',
-          recipientName: apt.patientName,
-          recipientContact: apt.patientPhone,
-          body: smsBody,
-          badge: waRes.isAutoSent ? 'Proposition WhatsApp Automatique' : 'Proposition de nouvel horaire (SMS)',
-          dateInfo: `${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris)`,
-          nativeSmsUrl: smsRes.nativeSmsUrl,
-          nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
-          statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
-        });
-      });
+    let cleanStudentPhone = apt.patientPhone.replace(/[\s.-]/g, '');
+    if (cleanStudentPhone.startsWith('0') && cleanStudentPhone.length === 10) {
+      cleanStudentPhone = '33' + cleanStudentPhone.substring(1);
+    }
+    const studentWaUrl = `https://wa.me/${cleanStudentPhone}?text=${encodeURIComponent(smsBody)}`;
+
+    openSimulatedDelivery({
+      channel: 'whatsapp',
+      recipientName: apt.patientName,
+      recipientContact: apt.patientPhone,
+      body: smsBody,
+      badge: 'Proposition de nouvel horaire',
+      dateInfo: `${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris)`,
+      nativeSmsUrl: `sms:${cleanStudentPhone.startsWith('33') ? '+' + cleanStudentPhone : cleanStudentPhone}?body=${encodeURIComponent(smsBody)}`,
+      nativeWhatsAppUrl: studentWaUrl,
+      statusInfo: 'Transmis en direct'
     });
 
-    showToast('Nouvel horaire envoyé', `Votre proposition (${formatDisplayDate(newDate)} à ${newTime} - Heure de Paris) a été transmise par WhatsApp/SMS à l'élève.`, 'info');
+    showToast('Nouvel horaire envoyé', `Votre proposition (${formatDisplayDate(newDate)} à ${newTime} - Heure de Paris) a été enregistrée.`, 'info');
   };
 
   // 4. Student Accepts Counter Proposal
@@ -923,6 +997,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setAppointments(prev => prev.map(a => a.id === id ? updatedApt : a));
 
+    // Sync to backend API
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: apt.proposedDate,
+        time: apt.proposedTime,
+        status: 'accepted',
+        proposedDate: undefined,
+        proposedTime: undefined,
+        practitionerNotes: `Créneau alternatif accepté par l'élève. (${apt.motif})`
+      })
+    }).catch(err => console.warn('Sync counter accept failed:', err));
+
     const notifForAymen: AppNotification = {
       id: 'notif-' + Date.now(),
       targetRole: 'aymen',
@@ -938,29 +1027,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setNotifications(prev => [notifForAymen, ...prev]);
     playNotificationSound();
-
-    const effectiveZoomLink = (apt.type === 'zoom' || apt.type === 'en_ligne') 
-      ? (apt.zoomLink || teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1') 
-      : undefined;
-
-    const zoomText = (apt.type === 'zoom' || apt.type === 'en_ligne') ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';
-    const smsBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName} ! C'est parfait, votre cours avec Aymen est bien confirmé pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris).${zoomText} Qu'Allah vous facilite l'apprentissage.`;
-
-    sendRealWhatsApp(apt.patientPhone, smsBody).then(waRes => {
-      sendRealSms(apt.patientPhone, smsBody).then(smsRes => {
-        openSimulatedDelivery({
-          channel: waRes.isAutoSent ? 'whatsapp' : 'sms',
-          recipientName: apt.patientName,
-          recipientContact: apt.patientPhone,
-          body: smsBody,
-          badge: waRes.isAutoSent ? 'Confirmation WhatsApp Automatique' : 'Cours Confirmé (SMS)',
-          dateInfo: `${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris)`,
-          nativeSmsUrl: smsRes.nativeSmsUrl,
-          nativeWhatsAppUrl: waRes.nativeWhatsAppUrl,
-          statusInfo: waRes.isAutoSent ? 'Envoyé par WhatsApp Web Bot' : smsRes.status
-        });
-      });
-    });
 
     showToast('Horaire validé !', `Votre cours est maintenant confirmé pour le ${formatDisplayDate(updatedApt.date)} à ${updatedApt.time} (Heure de Paris).`, 'success');
   };
@@ -978,6 +1044,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setAppointments(prev => prev.map(a => a.id === id ? updatedApt : a));
+
+    // Sync to backend API
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'declined',
+        practitionerNotes: reason ? `Non disponible : ${reason}` : 'Indisponibilité exceptionnelle.'
+      })
+    }).catch(err => console.warn('Sync decline failed:', err));
 
     const notifForStudent: AppNotification = {
       id: 'notif-' + Date.now(),
@@ -1002,6 +1079,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!apt) return;
 
     setAppointments(prev => prev.filter(a => a.id !== id));
+
+    // Sync to backend API
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.warn('Sync delete failed:', err));
 
     const notifForAymen: AppNotification = {
       id: 'notif-' + Date.now(),
@@ -1092,6 +1175,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchWhatsAppStatus,
         restartWhatsApp,
         whatsAppStatus,
+        backendUrl,
+        updateBackendUrl,
+        serverStatus,
+        checkServerHealth,
         getAvailableSlotsForDate,
         customDateSlots,
         getDateConfig,

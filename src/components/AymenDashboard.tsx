@@ -11,7 +11,6 @@ import {
   Search, 
   Video, 
   Phone, 
-  Smartphone,
   Check,
   MessageSquare
 } from 'lucide-react';
@@ -21,7 +20,6 @@ export const AymenDashboard: React.FC = () => {
     appointments, 
     acceptAppointment, 
     declineAppointment, 
-    openSimulatedDelivery,
     setAymenTab
   } = useApp();
 
@@ -371,26 +369,40 @@ export const AymenDashboard: React.FC = () => {
                         )}
                       </div>
 
-                      <button
-                        onClick={() => {
-                          openSimulatedDelivery({
-                            channel: 'sms',
-                            recipientName: apt.patientName,
-                            recipientContact: apt.patientPhone,
-                            body: isAccepted
-                              ? `COURS AYMEN : ✅ Aymen a confirmé votre cours du ${formatDisplayDate(apt.date)} à ${apt.time}.`
-                              : isCounter
-                              ? `COURS AYMEN : 🔄 Aymen vous propose un nouvel horaire : ${formatDisplayDate(apt.proposedDate || '')} à ${apt.proposedTime}.`
-                              : `COURS AYMEN : Demande de cours reçue.`,
-                            badge: 'SMS Élève',
-                            dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time}`
-                          });
-                        }}
-                        className="btn btn-outline btn-sm"
-                        style={{ fontSize: '0.8rem' }}
-                      >
-                        <Smartphone size={14} /> Aperçu SMS Élève
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <a
+                          href={`https://wa.me/${(() => {
+                            let p = apt.patientPhone.replace(/[\s.-]/g, '');
+                            return p.startsWith('0') ? '33' + p.substring(1) : p;
+                          })()}?text=${encodeURIComponent(
+                            isAccepted
+                              ? `Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Lien Zoom : ${apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}`
+                              : `Salam Aleykoum ${apt.patientName}, suite à votre demande de cours (${apt.motif}) pour le ${formatDisplayDate(apt.date)} à ${apt.time}.`
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-sm"
+                          style={{
+                            background: '#25D366',
+                            color: '#064E3B',
+                            fontWeight: 800,
+                            fontSize: '0.8rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <MessageSquare size={14} /> WhatsApp
+                        </a>
+
+                        <a
+                          href={`tel:${apt.patientPhone.replace(/[\s.-]/g, '')}`}
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Phone size={14} /> Appeler
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>
