@@ -7,11 +7,14 @@ import {
   ChevronRight, 
   Calendar as CalendarIcon, 
   CheckCircle2, 
-  RefreshCw 
+  RefreshCw,
+  XCircle,
+  MessageSquare,
+  Phone
 } from 'lucide-react';
 
 export const AymenAgenda: React.FC = () => {
-  const { appointments, acceptAppointment } = useApp();
+  const { appointments, acceptAppointment, declineAppointment } = useApp();
 
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -250,7 +253,7 @@ export const AymenAgenda: React.FC = () => {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
                 {selectedAppointment.status === 'pending' && (
                   <button
                     onClick={() => {
@@ -272,6 +275,48 @@ export const AymenAgenda: React.FC = () => {
                 >
                   <RefreshCw size={15} /> Proposer un autre horaire
                 </button>
+
+                <button
+                  onClick={() => {
+                    const reason = window.prompt("Motif de l'annulation (facultatif) :", "Empêchement exceptionnel");
+                    if (reason !== null) {
+                      declineAppointment(selectedAppointment.id, reason);
+                      setSelectedAppointment(null);
+                    }
+                  }}
+                  className="btn btn-danger-outline btn-sm"
+                  style={{ borderColor: '#EF4444', color: '#EF4444' }}
+                >
+                  <XCircle size={15} /> Annuler le cours
+                </button>
+              </div>
+
+              {/* Direct contact buttons */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
+                <a
+                  href={`https://wa.me/${(() => {
+                    let p = selectedAppointment.patientPhone.replace(/[\s.-]/g, '');
+                    return p.startsWith('0') ? '33' + p.substring(1) : p;
+                  })()}?text=${encodeURIComponent(
+                    selectedAppointment.status === 'accepted'
+                      ? `Salam Aleykoum ${selectedAppointment.patientName}, Aymen pour votre cours de ${selectedAppointment.motif} du ${formatDisplayDate(selectedAppointment.date)} à ${selectedAppointment.time} (Heure de Paris). Salle Zoom : ${selectedAppointment.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}`
+                      : `Salam Aleykoum ${selectedAppointment.patientName}, suite à votre réservation (${selectedAppointment.motif}) pour le ${formatDisplayDate(selectedAppointment.date)} à ${selectedAppointment.time}.`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-sm"
+                  style={{ background: '#25D366', color: '#064E3B', fontWeight: 800, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <MessageSquare size={14} /> WhatsApp
+                </a>
+
+                <a
+                  href={`tel:${selectedAppointment.patientPhone.replace(/[\s.-]/g, '')}`}
+                  className="btn btn-outline btn-sm"
+                  style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Phone size={14} /> Appeler
+                </a>
               </div>
             </div>
           </div>

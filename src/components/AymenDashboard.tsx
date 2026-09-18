@@ -360,12 +360,27 @@ export const AymenDashboard: React.FC = () => {
                         )}
 
                         {isAccepted && (
-                          <button
-                            onClick={() => setSelectedForCounter(apt)}
-                            className="btn btn-outline btn-sm"
-                          >
-                            <RefreshCw size={15} /> Proposer de décaler
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setSelectedForCounter(apt)}
+                              className="btn btn-outline btn-sm"
+                            >
+                              <RefreshCw size={15} /> Proposer de décaler
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                const reason = window.prompt("Motif de l'annulation (facultatif) :", "Empêchement exceptionnel");
+                                if (reason !== null) {
+                                  declineAppointment(apt.id, reason);
+                                }
+                              }}
+                              className="btn btn-danger-outline btn-sm"
+                              style={{ borderColor: '#EF4444', color: '#EF4444' }}
+                            >
+                              <XCircle size={15} /> Annuler le cours
+                            </button>
+                          </>
                         )}
                       </div>
 

@@ -6,12 +6,10 @@ import {
   Calendar, 
   Lock, 
   LogOut, 
-  RotateCcw, 
   Clock, 
   PhoneCall,
   UserCheck,
-  Zap,
-  Smartphone
+  Zap
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -24,7 +22,6 @@ export const Navbar: React.FC = () => {
     aymenTab,
     setAymenTab,
     appointments,
-    resetToDefaults,
     teacher
   } = useApp();
 
@@ -73,23 +70,6 @@ export const Navbar: React.FC = () => {
                 <PhoneCall size={15} /> Besoin d'aide pour réserver ? <strong>{teacher.phone}</strong>
               </span>
             )}
-
-            <button
-              onClick={resetToDefaults}
-              title="Réinitialiser pour la démonstration"
-              style={{
-                color: 'rgba(255, 255, 255, 0.9)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '0.78rem',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                background: 'rgba(0,0,0,0.15)'
-              }}
-            >
-              <RotateCcw size={12} /> Reset démo
-            </button>
           </div>
         </div>
 
@@ -221,18 +201,6 @@ export const Navbar: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => setAymenTab('sms_settings')}
-                  className="btn btn-sm"
-                  style={{
-                    background: aymenTab === 'sms_settings' ? '#047857' : '#F1F5F9',
-                    color: aymenTab === 'sms_settings' ? 'white' : 'var(--text-main)',
-                    fontWeight: 700
-                  }}
-                >
-                  <Smartphone size={15} /> SMS Réel
-                </button>
-
-                <button
                   onClick={() => setAymenTab('settings')}
                   className="btn btn-sm"
                   style={{
@@ -241,7 +209,7 @@ export const Navbar: React.FC = () => {
                     fontWeight: 700
                   }}
                 >
-                  Profil
+                  Profil & Paramètres
                 </button>
               </>
             )}

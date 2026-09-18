@@ -7,7 +7,6 @@ import { StudentMyLessons } from './components/StudentMyLessons';
 import { AymenDashboard } from './components/AymenDashboard';
 import { AymenAvailability } from './components/AymenAvailability';
 import { AymenAgenda } from './components/AymenAgenda';
-import { AymenSmsSettings } from './components/AymenSmsSettings';
 import { AymenSettings } from './components/AymenSettings';
 import { SmsEmailModal } from './components/SmsEmailModal';
 import { ToastContainer } from './components/ToastContainer';
@@ -121,7 +120,6 @@ const MainApp: React.FC = () => {
             {aymenTab === 'dashboard' && <AymenDashboard />}
             {aymenTab === 'availability' && <AymenAvailability />}
             {aymenTab === 'agenda' && <AymenAgenda />}
-            {aymenTab === 'sms_settings' && <AymenSmsSettings />}
             {aymenTab === 'settings' && <AymenSettings />}
           </div>
         )}
