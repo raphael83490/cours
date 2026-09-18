@@ -79,6 +79,8 @@ interface AppContextType {
   acceptCounterProposal: (id: string) => void;
   declineAppointment: (id: string, reason?: string) => void;
   cancelAppointment: (id: string) => void;
+  deleteAppointment: (id: string) => void;
+  clearDeclinedAppointments: () => void;
 
   // Real SMS & WhatsApp Direct Actions
   sendRealSms: (to: string, message: string) => Promise<{ success: boolean; nativeSmsUrl?: string; status?: string }>;
@@ -1150,6 +1152,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Cours annulé', 'Votre réservation a bien été annulée.', 'info');
   };
 
+  // 7. Aymen or Admin deletes appointment permanently to clean up
+  const deleteAppointment = (id: string) => {
+    const apt = appointments.find(a => a.id === id);
+    setAppointments(prev => prev.filter(a => a.id !== id));
+
+    const api = getEffectiveApiUrl();
+    fetch(`${api}/api/appointments/${id}`, {
+      method: 'DELETE'
+    }).catch(err => console.warn('Sync delete failed:', err));
+
+    showToast('Rendez-vous retiré', apt ? `Le créneau de ${apt.patientName} a été retiré de la page.` : 'Le rendez-vous a été retiré de la page.', 'info');
+  };
+
+  // Clear all declined/cancelled appointments to clean up the page
+  const clearDeclinedAppointments = () => {
+    const declinedList = appointments.filter(a => a.status === 'declined');
+    if (declinedList.length === 0) return;
+
+    setAppointments(prev => prev.filter(a => a.status !== 'declined'));
+
+    const api = getEffectiveApiUrl();
+    declinedList.forEach(apt => {
+      fetch(`${api}/api/appointments/${apt.id}`, { method: 'DELETE' }).catch(() => {});
+    });
+
+    showToast('Page nettoyée', `${declinedList.length} cours annulé(s) définitivement retiré(s) de la page.`, 'success');
+  };
+
   const markNotificationAsRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
@@ -1219,6 +1249,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         acceptCounterProposal,
         declineAppointment,
         cancelAppointment,
+        deleteAppointment,
+        clearDeclinedAppointments,
         sendRealSms,
         sendRealWhatsApp,
         fetchWhatsAppStatus,

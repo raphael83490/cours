@@ -10,11 +10,12 @@ import {
   RefreshCw,
   XCircle,
   MessageSquare,
-  Phone
+  Phone,
+  Trash2
 } from 'lucide-react';
 
 export const AymenAgenda: React.FC = () => {
-  const { appointments, acceptAppointment, declineAppointment } = useApp();
+  const { appointments, acceptAppointment, declineAppointment, deleteAppointment } = useApp();
 
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -288,6 +289,20 @@ export const AymenAgenda: React.FC = () => {
                   style={{ borderColor: '#EF4444', color: '#EF4444' }}
                 >
                   <XCircle size={15} /> Annuler le cours
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (window.confirm("Voulez-vous retirer définitivement ce cours du planning pour nettoyer ?")) {
+                      deleteAppointment(selectedAppointment.id);
+                      setSelectedAppointment(null);
+                    }
+                  }}
+                  className="btn btn-outline btn-sm"
+                  style={{ borderColor: '#FECACA', color: '#DC2626', background: '#FFF5F5' }}
+                  title="Supprimer définitivement ce rendez-vous"
+                >
+                  <Trash2 size={15} /> Supprimer / Nettoyer
                 </button>
               </div>
 

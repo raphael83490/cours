@@ -12,7 +12,8 @@ import {
   Video, 
   Phone, 
   Check,
-  MessageSquare
+  MessageSquare,
+  Trash2
 } from 'lucide-react';
 
 export const AymenDashboard: React.FC = () => {
@@ -20,6 +21,8 @@ export const AymenDashboard: React.FC = () => {
     appointments, 
     acceptAppointment, 
     declineAppointment, 
+    deleteAppointment,
+    clearDeclinedAppointments,
     setAymenTab
   } = useApp();
 
@@ -50,6 +53,7 @@ export const AymenDashboard: React.FC = () => {
   const pendingCount = upcomingAppointments.filter(a => a.status === 'pending').length;
   const acceptedCount = upcomingAppointments.filter(a => a.status === 'accepted').length;
   const counterCount = upcomingAppointments.filter(a => a.status === 'counter_proposed').length;
+  const declinedCount = appointments.filter(a => a.status === 'declined').length;
 
   const baseList = showPastAppointments ? appointments : upcomingAppointments;
 
@@ -246,6 +250,31 @@ export const AymenDashboard: React.FC = () => {
               </button>
             )}
 
+            {activeFilter === 'all' && declinedCount > 0 && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`Voulez-vous supprimer et nettoyer définitivement les ${declinedCount} cours annulés de la page ?`)) {
+                    clearDeclinedAppointments();
+                  }
+                }}
+                className="btn btn-sm btn-outline"
+                style={{
+                  fontSize: '0.82rem',
+                  padding: '6px 12px',
+                  background: '#FEF2F2',
+                  borderColor: '#FECACA',
+                  color: '#DC2626',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Supprimer tous les rendez-vous annulés pour faire place nette"
+              >
+                <Trash2 size={14} /> Nettoyer les annulés ({declinedCount})
+              </button>
+            )}
+
             <div style={{ position: 'relative', width: '220px' }}>
               <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '12px' }} />
               <input
@@ -294,6 +323,7 @@ export const AymenDashboard: React.FC = () => {
               const isPending = apt.status === 'pending';
               const isAccepted = apt.status === 'accepted';
               const isCounter = apt.status === 'counter_proposed';
+              const isDeclined = apt.status === 'declined';
 
               return (
                 <div
@@ -302,10 +332,11 @@ export const AymenDashboard: React.FC = () => {
                     padding: '20px',
                     borderRadius: 'var(--radius-md)',
                     border: '2px solid var(--border-subtle)',
-                    background: isPending ? '#FFFBEB' : 'white',
+                    background: isPending ? '#FFFBEB' : isDeclined ? '#F9FAFB' : 'white',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '14px'
+                    gap: '14px',
+                    opacity: isDeclined ? 0.85 : 1
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
@@ -326,6 +357,7 @@ export const AymenDashboard: React.FC = () => {
                       {isPending && <span className="badge badge-pending">En attente de validation</span>}
                       {isAccepted && <span className="badge badge-accepted">Confirmé par vous</span>}
                       {isCounter && <span className="badge badge-counter">Proposition envoyée</span>}
+                      {isDeclined && <span className="badge" style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA', fontWeight: 700 }}>Annulé / Refusé</span>}
                     </div>
                   </div>
 
@@ -437,6 +469,30 @@ export const AymenDashboard: React.FC = () => {
                               <XCircle size={15} /> Annuler le cours
                             </button>
                           </>
+                        )}
+
+                        {(activeFilter === 'all' || isDeclined) && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Voulez-vous retirer définitivement la réservation de ${apt.patientName} de la page pour nettoyer ?`)) {
+                                deleteAppointment(apt.id);
+                              }
+                            }}
+                            className="btn btn-sm btn-outline"
+                            style={{
+                              borderColor: '#FECACA',
+                              color: '#DC2626',
+                              background: '#FFF5F5',
+                              fontSize: '0.82rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontWeight: 600
+                            }}
+                            title="Retirer et nettoyer ce rendez-vous de la page"
+                          >
+                            <Trash2 size={14} /> Supprimer / Nettoyer
+                          </button>
                         )}
                       </div>
 
