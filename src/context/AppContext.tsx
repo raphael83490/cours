@@ -207,9 +207,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_SMS_CONFIG;
   });
 
-  const [isAymenLoggedIn, setIsAymenLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEY_AUTH) === 'true';
-  });
+  // Authentication is session-only: requires password on every visit
+  const [isAymenLoggedIn, setIsAymenLoggedIn] = useState<boolean>(false);
 
   const [currentStudentPhone, setCurrentStudentPhone] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEY_STUDENT_PHONE) || '06 12 34 56 78';
@@ -272,8 +271,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [smsConfig]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_AUTH, isAymenLoggedIn ? 'true' : 'false');
-  }, [isAymenLoggedIn]);
+    try {
+      localStorage.removeItem(STORAGE_KEY_AUTH);
+    } catch {}
+  }, []);
 
   const loginAymen = (pass: string): boolean => {
     const trimmed = pass.trim();

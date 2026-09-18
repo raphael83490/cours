@@ -59,7 +59,7 @@ const DEFAULT_APPOINTMENTS = [
     motif: 'Lecture & Récitation (Tajwid)',
     type: 'zoom',
     zoomLink: 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1',
-    date: new Date().toISOString().split('T')[0],
+    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     time: '18:00',
     status: 'pending',
     createdAt: new Date(Date.now() - 3600000).toISOString(),
@@ -226,7 +226,15 @@ async function sendWhatsAppDirect(to, message) {
 
   if (isWhatsAppReady && whatsappClient) {
     try {
-      const chatId = `${cleaned}@c.us`;
+      // Determine correct chatId (support sending to self if Aymen is the logged in client)
+      let chatId = `${cleaned}@c.us`;
+      if (whatsappClient.info && whatsappClient.info.wid) {
+        const clientUser = whatsappClient.info.wid.user;
+        if (clientUser && (cleaned === clientUser || cleaned.endsWith(clientUser) || clientUser.endsWith(cleaned))) {
+          chatId = whatsappClient.info.wid._serialized;
+        }
+      }
+
       await whatsappClient.sendMessage(chatId, message);
       logActivity(`Message WhatsApp automatique ENVOYÉ au ${cleaned} : "${message.substring(0, 45)}..."`);
       return { success: true, isAutoSent: true, nativeWhatsAppUrl, status: 'sent_automatically' };
@@ -338,7 +346,24 @@ app.post('/api/appointments', async (req, res) => {
 
     logActivity(`Nouvelle réservation reçue : ${newApt.patientName} (${newApt.date} à ${newApt.time})`);
 
-    // Automatic WhatsApp notification to the student if client is connected
+    // 1. Notification WhatsApp automatique envoyée directement à Aymen
+    const AYMEN_PHONE = process.env.AYMEN_PHONE || '06 13 92 09 87';
+    const aymenAlertMsg = `📢 NOUVELLE DEMANDE DE COURS (COURS AYMEN)
+
+Salam Aleykoum Aymen, un élève vient de demander un créneau :
+👤 Élève : ${newApt.patientName}
+📞 Téléphone : ${newApt.patientPhone}
+📖 Cours : ${newApt.motif}
+📅 Date : ${newApt.date} à ${newApt.time} (Heure de Paris)
+💻 Type : ${newApt.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel/Vidéo)'}${newApt.patientNotes ? `\n📝 Note élève : "${newApt.patientNotes}"` : ''}
+
+👉 Connectez-vous à votre espace enseignant pour confirmer le créneau ou proposer un autre horaire.`;
+
+    sendWhatsAppDirect(AYMEN_PHONE, aymenAlertMsg).catch(err => {
+      console.error('Erreur alerte WhatsApp envoyée à Aymen:', err);
+    });
+
+    // 2. Notification WhatsApp automatique envoyée à l'élève
     const confirmMsg = `COURS AYMEN : Salam Aleykoum ${newApt.patientName}, votre demande de cours (${newApt.motif}) pour le ${newApt.date} à ${newApt.time} (Heure de Paris) a bien été reçue par Aymen. Vous recevrez la confirmation et la salle Zoom dès validation.`;
     sendWhatsAppDirect(newApt.patientPhone, confirmMsg).catch(() => {});
 

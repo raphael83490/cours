@@ -14,11 +14,25 @@ import {
   Phone, 
   Heart, 
   CheckCircle2, 
-  ShieldCheck 
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 
 const MainApp: React.FC = () => {
-  const { currentView, aymenTab, teacher } = useApp();
+  const { currentView, aymenTab, isAymenLoggedIn, loginAymen, teacher } = useApp();
+  const [aymenPassword, setAymenPassword] = React.useState('');
+  const [authError, setAuthError] = React.useState(false);
+
+  const handleAymenLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = loginAymen(aymenPassword);
+    if (!ok) {
+      setAuthError(true);
+    } else {
+      setAymenPassword('');
+      setAuthError(false);
+    }
+  };
 
   return (
     <div className="app-container">
@@ -116,12 +130,67 @@ const MainApp: React.FC = () => {
 
         {/* Aymen Protected Teacher Space */}
         {currentView === 'aymen_portal' && (
-          <div>
-            {aymenTab === 'dashboard' && <AymenDashboard />}
-            {aymenTab === 'availability' && <AymenAvailability />}
-            {aymenTab === 'agenda' && <AymenAgenda />}
-            {aymenTab === 'settings' && <AymenSettings />}
-          </div>
+          isAymenLoggedIn ? (
+            <div>
+              {aymenTab === 'dashboard' && <AymenDashboard />}
+              {aymenTab === 'availability' && <AymenAvailability />}
+              {aymenTab === 'agenda' && <AymenAgenda />}
+              {aymenTab === 'settings' && <AymenSettings />}
+            </div>
+          ) : (
+            <div style={{ maxWidth: '440px', margin: '40px auto', padding: '0 16px' }}>
+              <div className="card animate-slide-up" style={{ padding: '32px 24px', textAlign: 'center', boxShadow: 'var(--shadow-lg)' }}>
+                <div style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  background: '#FEF3C7',
+                  color: '#D97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px'
+                }}>
+                  <Lock size={28} />
+                </div>
+                <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#064E3B', marginBottom: '8px' }}>
+                  Espace Réservé à Aymen
+                </h2>
+                <p style={{ fontSize: '0.92rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                  Veuillez saisir votre mot de passe pour accéder à la gestion de vos cours et vos réservations.
+                </p>
+
+                <form onSubmit={handleAymenLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <input
+                    type="password"
+                    placeholder="Mot de passe enseignant..."
+                    value={aymenPassword}
+                    onChange={(e) => {
+                      setAymenPassword(e.target.value);
+                      setAuthError(false);
+                    }}
+                    autoFocus
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      border: authError ? '2px solid #DC2626' : '1.5px solid var(--border)',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      textAlign: 'center'
+                    }}
+                  />
+                  {authError && (
+                    <span style={{ color: '#DC2626', fontSize: '0.85rem', fontWeight: 600 }}>
+                      Mot de passe incorrect.
+                    </span>
+                  )}
+                  <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center', padding: '12px' }}>
+                    Déverrouiller l'espace
+                  </button>
+                </form>
+              </div>
+            </div>
+          )
         )}
       </main>
 

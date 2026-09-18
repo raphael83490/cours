@@ -25,15 +25,35 @@ export const AymenDashboard: React.FC = () => {
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'accepted' | 'counter_proposed'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showPastAppointments, setShowPastAppointments] = useState(false);
   const [selectedForCounter, setSelectedForCounter] = useState<Appointment | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [practitionerNote, setPractitionerNote] = useState('');
 
-  const pendingCount = appointments.filter(a => a.status === 'pending').length;
-  const acceptedCount = appointments.filter(a => a.status === 'accepted').length;
-  const counterCount = appointments.filter(a => a.status === 'counter_proposed').length;
+  // Helper to check if an appointment is upcoming (à venir)
+  const isUpcomingAppointment = (apt: Appointment): boolean => {
+    if (!apt.date) return true;
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (apt.date < todayStr) return false;
+    if (apt.date > todayStr) return true;
+    if (!apt.time) return true;
+    const now = new Date();
+    const [h, m] = apt.time.split(':').map(Number);
+    const aptDateTime = new Date();
+    aptDateTime.setHours(h || 0, (m || 0) + 30, 0, 0); // Visible jusqu'à 30 min après le début
+    return aptDateTime.getTime() >= now.getTime();
+  };
 
-  const filteredAppointments = appointments.filter(apt => {
+  const upcomingAppointments = appointments.filter(isUpcomingAppointment);
+  const pastAppointments = appointments.filter(a => !isUpcomingAppointment(a));
+
+  const pendingCount = upcomingAppointments.filter(a => a.status === 'pending').length;
+  const acceptedCount = upcomingAppointments.filter(a => a.status === 'accepted').length;
+  const counterCount = upcomingAppointments.filter(a => a.status === 'counter_proposed').length;
+
+  const baseList = showPastAppointments ? appointments : upcomingAppointments;
+
+  const filteredAppointments = baseList.filter(apt => {
     if (activeFilter !== 'all' && apt.status !== activeFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -203,34 +223,70 @@ export const AymenDashboard: React.FC = () => {
               onClick={() => setActiveFilter('all')}
               className={`btn btn-sm ${activeFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
             >
-              Toutes ({appointments.length})
+              Toutes {showPastAppointments ? `(${appointments.length})` : `(${upcomingAppointments.length})`}
             </button>
           </div>
 
-          <div style={{ position: 'relative', width: '240px' }}>
-            <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '12px' }} />
-            <input
-              type="text"
-              placeholder="Rechercher élève..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 34px',
-                borderRadius: '8px',
-                border: '1.5px solid var(--border-subtle)',
-                fontSize: '0.9rem',
-                outline: 'none'
-              }}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {pastAppointments.length > 0 && (
+              <button
+                onClick={() => setShowPastAppointments(!showPastAppointments)}
+                className="btn btn-sm btn-outline"
+                style={{
+                  fontSize: '0.82rem',
+                  padding: '6px 12px',
+                  background: showPastAppointments ? '#FEF3C7' : '#F8FAFC',
+                  borderColor: showPastAppointments ? '#D97706' : '#E2E8F0',
+                  color: showPastAppointments ? '#92400E' : '#475569',
+                  fontWeight: 600
+                }}
+                title="Basculer entre uniquement les cours à venir ou inclure les cours passés"
+              >
+                {showPastAppointments ? '👁️ Masquer passés' : `📂 Afficher passés (${pastAppointments.length})`}
+              </button>
+            )}
+
+            <div style={{ position: 'relative', width: '220px' }}>
+              <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '12px' }} />
+              <input
+                type="text"
+                placeholder="Rechercher élève..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 34px',
+                  borderRadius: '8px',
+                  border: '1.5px solid var(--border-subtle)',
+                  fontSize: '0.9rem',
+                  outline: 'none'
+                }}
+              />
+            </div>
           </div>
         </div>
 
         {/* List */}
         {filteredAppointments.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <CheckCircle2 size={36} style={{ opacity: 0.3, margin: '0 auto 10px' }} />
-            <p style={{ fontWeight: 700 }}>Aucune demande dans cette catégorie</p>
+          <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Calendar size={40} style={{ opacity: 0.35, margin: '0 auto 12px' }} />
+            <p style={{ fontWeight: 800, fontSize: '1.05rem', color: '#064E3B', marginBottom: '4px' }}>
+              {activeFilter === 'pending' ? 'Aucune demande à venir en attente' : 'Aucun cours à afficher'}
+            </p>
+            <p style={{ fontSize: '0.9rem', maxWidth: '420px', margin: '0 auto' }}>
+              {activeFilter === 'pending'
+                ? 'Toutes vos demandes de cours à venir ont été traitées.'
+                : 'Seuls les cours à venir sont affichés pour garder votre espace clair.'}
+            </p>
+            {!showPastAppointments && pastAppointments.length > 0 && (
+              <button
+                onClick={() => setShowPastAppointments(true)}
+                className="btn btn-sm btn-outline"
+                style={{ marginTop: '14px', fontSize: '0.85rem' }}
+              >
+                Afficher l'historique des {pastAppointments.length} cours passés
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
