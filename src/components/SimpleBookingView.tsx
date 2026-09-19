@@ -9,7 +9,9 @@ import {
   Send, 
   User, 
   AlertCircle,
-  Calendar
+  Calendar,
+  Lock,
+  Check
 } from 'lucide-react';
 
 const DURATION_OPTIONS = [
@@ -18,7 +20,7 @@ const DURATION_OPTIONS = [
 ];
 
 export const SimpleBookingView: React.FC = () => {
-  const { bookLesson, setCurrentView, getAvailableSlotsForDate } = useApp();
+  const { bookLesson, setCurrentView, getAvailableSlotsForDate, getDateConfig, appointments } = useApp();
 
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<number>(1); // Default to 30min
   const [selectedType, setSelectedType] = useState<LessonType>('whatsapp');
@@ -40,6 +42,20 @@ export const SimpleBookingView: React.FC = () => {
   const availableSlots = useMemo(() => {
     return getAvailableSlotsForDate(selectedDate);
   }, [selectedDate, getAvailableSlotsForDate]);
+
+  const dayConfig = useMemo(() => {
+    return getDateConfig(selectedDate);
+  }, [selectedDate, getDateConfig]);
+
+  const allDaySlots = useMemo(() => {
+    return dayConfig.enabled ? [...dayConfig.slots] : [];
+  }, [dayConfig]);
+
+  const bookedSlots = useMemo(() => {
+    return appointments
+      .filter(a => a.date === selectedDate && (a.status === 'accepted' || a.status === 'pending'))
+      .map(a => a.time.trim());
+  }, [appointments, selectedDate]);
 
   const [selectedTime, setSelectedTime] = useState<string>('14:30');
 
@@ -84,37 +100,43 @@ export const SimpleBookingView: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentName.trim() || !studentPhone.trim() || availableSlots.length === 0) {
+    if (!studentName.trim() || !studentPhone.trim() || availableSlots.length === 0 || !availableSlots.includes(selectedTime)) {
       return;
     }
 
     setIsSubmitting(true);
 
     setTimeout(() => {
-      bookLesson({
-        patientName: studentName.trim(),
-        patientEmail: studentName.toLowerCase().replace(/\s+/g, '.') + '@eleve.fr',
-        patientPhone: studentPhone.trim(),
-        motif: currentDuration.title,
-        type: selectedType,
-        date: selectedDate,
-        time: selectedTime,
-        patientNotes: studentNotes.trim() || undefined
-      });
-
       try {
-        confetti({
-          particleCount: 70,
-          spread: 60,
-          origin: { y: 0.6 }
+        const apt = bookLesson({
+          patientName: studentName.trim(),
+          patientEmail: studentName.toLowerCase().replace(/\s+/g, '.') + '@eleve.fr',
+          patientPhone: studentPhone.trim(),
+          motif: currentDuration.title,
+          type: selectedType,
+          date: selectedDate,
+          time: selectedTime,
+          patientNotes: studentNotes.trim() || undefined
         });
-      } catch {
-        // fallback
-      }
 
-      setIsSubmitting(false);
-      setCurrentView('student_my_lessons');
-    }, 400);
+        if (apt) {
+          try {
+            confetti({
+              particleCount: 70,
+              spread: 60,
+              origin: { y: 0.6 }
+            });
+          } catch {
+            // fallback
+          }
+          setCurrentView('student_my_lessons');
+        }
+      } catch (err) {
+        console.error('Erreur réservation:', err);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }, 350);
   };
 
   return (
@@ -519,7 +541,27 @@ export const SimpleBookingView: React.FC = () => {
             )}
           </div>
 
-          {availableSlots.length === 0 ? (
+          {/* Bannière d'information cours 100% individuels */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+            padding: '12px 16px',
+            background: '#ECFDF5',
+            border: '1.5px solid #10B981',
+            borderRadius: '10px',
+            marginBottom: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#064E3B', fontWeight: 800, fontSize: '0.94rem' }}>
+              <Lock size={17} color="#047857" />
+              <span>Cours 100% Individuels — 1 seul élève par créneau :</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#047857', lineHeight: 1.45 }}>
+              Chaque créneau est strictement réservé pour un seul élève. <strong>Dès qu'un rendez-vous est pris, il n'est plus disponible pour les autres élèves</strong>. Les horaires sont fixes et stricts.
+            </p>
+          </div>
+
+          {!dayConfig.enabled || allDaySlots.length === 0 ? (
             <div style={{
               padding: '16px',
               background: '#FEF3C7',
@@ -536,32 +578,70 @@ export const SimpleBookingView: React.FC = () => {
             </div>
           ) : (
             <>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 14px',
-                background: '#ECFDF5',
-                border: '1px solid #A7F3D0',
-                borderRadius: '8px',
-                color: '#065F46',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                marginBottom: '12px'
-              }}>
-                <span>🔒</span>
-                <span>Horaires fixes : Les créneaux ci-dessous sont fixes et stricts. Aucun autre horaire ne peut être proposé.</span>
-              </div>
+              {availableSlots.length === 0 && (
+                <div style={{
+                  padding: '14px 16px',
+                  background: '#FEF2F2',
+                  borderRadius: '8px',
+                  border: '1.5px solid #FECACA',
+                  color: '#991B1B',
+                  fontSize: '0.92rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginBottom: '14px'
+                }}>
+                  <AlertCircle size={20} color="#DC2626" />
+                  <span>Tous les créneaux de cette date sont déjà pris par d'autres élèves (cours individuels). Veuillez sélectionner un autre jour dans le calendrier ci-dessus.</span>
+                </div>
+              )}
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-                <span>Créneaux disponibles pour ce jour :</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px', flexWrap: 'wrap' }}>
+                <span>Créneaux pour ce jour :</span>
                 <span style={{ fontSize: '0.78rem', color: '#047857', fontWeight: 800, background: '#DCFCE7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
                   ⏰ Heure de Paris
                 </span>
+                {bookedSlots.length > 0 && (
+                  <span style={{ fontSize: '0.76rem', color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px', border: '1px solid #CBD5E1' }}>
+                    🔒 {bookedSlots.length} déjà réservé{bookedSlots.length > 1 ? 's' : ''}
+                  </span>
+                )}
               </label>
+
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {availableSlots.map((time) => {
-                  const isSelected = selectedTime === time;
+                {allDaySlots.map((time) => {
+                  const isBooked = bookedSlots.includes(time.trim()) || !availableSlots.includes(time);
+                  const isSelected = selectedTime === time && !isBooked;
+
+                  if (isBooked) {
+                    return (
+                      <div
+                        key={time}
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          fontSize: '0.92rem',
+                          fontWeight: 700,
+                          border: '1.5px dashed #CBD5E1',
+                          background: '#F8FAFC',
+                          color: '#94A3B8',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'not-allowed',
+                          userSelect: 'none'
+                        }}
+                        title="Ce créneau est déjà réservé par un autre élève (cours individuel)"
+                      >
+                        <Lock size={14} color="#94A3B8" />
+                        <span style={{ textDecoration: 'line-through' }}>{time}</span>
+                        <span style={{ fontSize: '0.72rem', background: '#E2E8F0', color: '#64748B', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                          Déjà pris
+                        </span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
                       type="button"
@@ -570,14 +650,27 @@ export const SimpleBookingView: React.FC = () => {
                       style={{
                         padding: '12px 20px',
                         borderRadius: '10px',
-                        fontSize: '1.1rem',
+                        fontSize: '1.05rem',
                         fontWeight: 800,
-                        border: `2px solid ${isSelected ? '#047857' : '#E2E8F0'}`,
-                        background: isSelected ? '#047857' : '#F8FAFC',
-                        color: isSelected ? 'white' : '#1E293B'
+                        border: `2px solid ${isSelected ? '#047857' : '#86EFAC'}`,
+                        background: isSelected ? '#047857' : '#F0FDF4',
+                        color: isSelected ? 'white' : '#065F46',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: isSelected ? '0 4px 12px rgba(4, 120, 87, 0.25)' : 'none',
+                        transition: 'all 0.15s ease'
                       }}
                     >
-                      {time}
+                      <span>{time}</span>
+                      {isSelected ? (
+                        <Check size={16} />
+                      ) : (
+                        <span style={{ fontSize: '0.72rem', background: '#DCFCE7', color: '#166534', padding: '2px 6px', borderRadius: '4px' }}>
+                          Dispo
+                        </span>
+                      )}
                     </button>
                   );
                 })}

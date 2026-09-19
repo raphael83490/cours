@@ -50,22 +50,7 @@ function logActivity(message) {
 }
 
 // Initial Appointments Seed
-const DEFAULT_APPOINTMENTS = [
-  {
-    id: 'apt-1',
-    patientName: 'Sofiane B.',
-    patientEmail: 'sofiane@exemple.fr',
-    patientPhone: '06 12 34 56 78',
-    motif: 'Lecture & Récitation (Tajwid)',
-    type: 'zoom',
-    zoomLink: 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1',
-    date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-    time: '18:00',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    patientNotes: 'Débutant en récitation, souhaite revoir les règles d\'assimilation.'
-  }
-];
+const DEFAULT_APPOINTMENTS = [];
 
 function loadAppointments() {
   try {
@@ -325,6 +310,21 @@ app.post('/api/appointments', async (req, res) => {
       return res.status(400).json({ error: 'Champs obligatoires manquants.' });
     }
 
+    const reqDate = String(data.date).trim();
+    const reqTime = String(data.time).trim();
+
+    // Règle stricte : Cours 100% individuels, aucun doublon possible
+    const isConflict = appointments.some(
+      a => a.date === reqDate && a.time === reqTime && (a.status === 'accepted' || a.status === 'pending') && a.id !== data.id
+    );
+
+    if (isConflict) {
+      logActivity(`Refus réservation : créneau déjà réservé en individuel (${reqDate} à ${reqTime}) par ${data.patientName}`);
+      return res.status(409).json({
+        error: `Ce créneau (${reqDate} à ${reqTime}) est déjà réservé par un autre élève. Les cours sont strictement individuels.`
+      });
+    }
+
     const newApt = {
       id: data.id || 'apt-' + Date.now(),
       patientName: data.patientName.trim(),
@@ -333,8 +333,8 @@ app.post('/api/appointments', async (req, res) => {
       motif: data.motif || 'Cours particulier',
       type: data.type || 'zoom',
       zoomLink: data.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1',
-      date: data.date,
-      time: data.time,
+      date: reqDate,
+      time: reqTime,
       status: data.status || 'pending',
       patientNotes: data.patientNotes || '',
       createdAt: data.createdAt || new Date().toISOString(),
@@ -350,14 +350,14 @@ app.post('/api/appointments', async (req, res) => {
     const AYMEN_PHONE = process.env.AYMEN_PHONE || '06 13 92 09 87';
     const aymenAlertMsg = `📢 NOUVELLE DEMANDE DE COURS (COURS AYMEN)
 
-Salam Aleykoum Aymen, un élève vient de demander un créneau :
+Salam Aleykoum Aymen, un élève vient de réserver un créneau :
 👤 Élève : ${newApt.patientName}
 📞 Téléphone : ${newApt.patientPhone}
 📖 Cours : ${newApt.motif}
 📅 Date : ${newApt.date} à ${newApt.time} (Heure de Paris)
 💻 Type : ${newApt.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel/Vidéo)'}${newApt.patientNotes ? `\n📝 Note élève : "${newApt.patientNotes}"` : ''}
 
-👉 Connectez-vous à votre espace enseignant pour confirmer le créneau ou proposer un autre horaire.`;
+👉 Connectez-vous à votre espace enseignant pour valider ou refuser la réservation (cours individuel selon les horaires fixes).`;
 
     sendWhatsAppDirect(AYMEN_PHONE, aymenAlertMsg).catch(err => {
       console.error('Erreur alerte WhatsApp envoyée à Aymen:', err);

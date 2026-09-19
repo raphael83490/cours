@@ -27,3 +27,5 @@ dist-ssr
 .wwebjs_auth
 .wwebjs_cache
 .env
+data/
+

@@ -370,10 +370,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
             }
 
-            // Merge server appointments with any unsaved local ones
+            // Keep server appointments as authoritative source of truth.
+            // Only preserve recent in-flight appointments (created in last 15s) not yet received from server
+            const now = Date.now();
             const serverIds = new Set(serverApts.map(a => a.id));
-            const localOnly = prevLocal.filter(l => !serverIds.has(l.id));
-            return [...serverApts, ...localOnly];
+            const inFlightLocal = prevLocal.filter(l => {
+              if (serverIds.has(l.id)) return false;
+              const createdTime = new Date(l.createdAt || 0).getTime();
+              return (now - createdTime) < 15000;
+            });
+            return [...serverApts, ...inFlightLocal];
           });
         } else {
           if (isSubscribed) setServerStatus('offline');
@@ -814,7 +820,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSimulatedDelivery(null);
   };
 
-  // 1. Student books a lesson
+  // 1. Student books a lesson (Strict 1-on-1 rule: only 1 student per slot)
   const bookLesson = (data: {
     patientName: string;
     patientEmail: string;
@@ -825,11 +831,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     time: string;
     patientNotes?: string;
   }): Appointment => {
+    const cleanDate = data.date.trim();
+    const cleanTime = data.time.trim();
+
+    // Vérification stricte de disponibilité (cours 100% individuels)
+    const isConflict = appointments.some(
+      a => a.date === cleanDate && a.time.trim() === cleanTime && (a.status === 'accepted' || a.status === 'pending')
+    );
+
+    if (isConflict) {
+      showToast('Créneau indisponible', 'Ce créneau vient d\'être réservé par un autre élève (cours 100% individuel). Veuillez choisir un autre horaire.', 'error');
+      throw new Error('SLOT_ALREADY_BOOKED');
+    }
+
     const effectiveZoomLink = data.type === 'zoom' ? (teacher.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1') : undefined;
 
     const newApt: Appointment = {
       id: 'apt-' + Date.now(),
       ...data,
+      date: cleanDate,
+      time: cleanTime,
       zoomLink: effectiveZoomLink,
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -845,6 +866,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newApt)
+    }).then(async (res) => {
+      if (res.status === 409) {
+        const errData = await res.json().catch(() => ({}));
+        showToast('Créneau déjà réservé', errData.error || 'Ce créneau a été réservé par un autre élève (cours individuel).', 'error');
+        // Annuler immédiatement la réservation en local
+        setAppointments(prev => prev.filter(a => a.id !== newApt.id));
+      }
     }).catch(err => console.warn('Sync booking to server failed:', err));
 
     // Notification for Aymen
