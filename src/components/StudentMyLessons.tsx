@@ -5,19 +5,16 @@ import {
   Video, 
   Clock, 
   CheckCircle2, 
-  AlertCircle, 
   XCircle, 
   MessageSquare,
   Phone,
   User,
   ArrowRight
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 
 export const StudentMyLessons: React.FC = () => {
   const { 
     appointments, 
-    acceptCounterProposal, 
     cancelAppointment, 
     openSimulatedDelivery, 
     setCurrentView,
@@ -27,19 +24,6 @@ export const StudentMyLessons: React.FC = () => {
 
   const [phoneInput, setPhoneInput] = useState('');
   const [isChangingPhone, setIsChangingPhone] = useState(!currentStudentPhone);
-
-  const handleAcceptProposal = (id: string) => {
-    acceptCounterProposal(id);
-    try {
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.5 }
-      });
-    } catch {
-      // fallback
-    }
-  };
 
   const handleSearchPhone = (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,7 +198,6 @@ export const StudentMyLessons: React.FC = () => {
           {myAppointments.map((apt) => {
             const isPending = apt.status === 'pending';
             const isAccepted = apt.status === 'accepted';
-            const isCounter = apt.status === 'counter_proposed';
             const isDeclined = apt.status === 'declined';
 
             return (
@@ -224,9 +207,7 @@ export const StudentMyLessons: React.FC = () => {
                 style={{
                   padding: '24px',
                   border: `2.5px solid ${
-                    isCounter 
-                      ? '#0284C7' 
-                      : isAccepted 
+                    isAccepted 
                       ? '#047857' 
                       : isPending 
                       ? '#D97706' 
@@ -256,11 +237,6 @@ export const StudentMyLessons: React.FC = () => {
                     {isAccepted && (
                       <span className="badge badge-accepted" style={{ fontSize: '0.9rem', padding: '6px 14px' }}>
                         <CheckCircle2 size={15} /> Confirmé par Aymen
-                      </span>
-                    )}
-                    {isCounter && (
-                      <span className="badge badge-counter" style={{ fontSize: '0.9rem', padding: '6px 14px' }}>
-                        <Clock size={15} className="pulse-badge" /> Aymen vous propose un nouvel horaire
                       </span>
                     )}
                     {isDeclined && (
@@ -317,77 +293,6 @@ export const StudentMyLessons: React.FC = () => {
                     >
                       <MessageSquare size={16} /> Écrire à Aymen sur WhatsApp
                     </a>
-                  </div>
-                )}
-
-                {/* Counter Proposal Notification Card */}
-                {isCounter && (
-                  <div 
-                    className="animate-slide-up"
-                    style={{
-                      background: '#F0F9FF',
-                      border: '2px solid #38BDF8',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '20px',
-                      marginBottom: '20px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0369A1', marginBottom: '10px' }}>
-                      <AlertCircle size={22} />
-                      <strong style={{ fontSize: '1.1rem' }}>
-                        Aymen ne peut pas à l'heure demandée et vous propose :
-                      </strong>
-                    </div>
-
-                    <div style={{
-                      background: 'white',
-                      padding: '14px 18px',
-                      borderRadius: '10px',
-                      border: '1.5px solid #BAE6FD',
-                      marginBottom: '14px'
-                    }}>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#075985' }}>
-                        {formatDisplayDate(apt.proposedDate || '')} à {apt.proposedTime}
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#64748B' }}>
-                        (Horaire initialement demandé : {formatDisplayDate(apt.date)} à {apt.time})
-                      </div>
-                    </div>
-
-                    {apt.counterProposalMessage && (
-                      <div style={{
-                        background: 'rgba(255,255,255,0.8)',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        fontSize: '0.92rem',
-                        color: '#1E293B',
-                        marginBottom: '16px',
-                        display: 'flex',
-                        gap: '8px'
-                      }}>
-                        <MessageSquare size={16} color="#0284C7" style={{ flexShrink: 0, marginTop: '3px' }} />
-                        <div><strong>Message d'Aymen : </strong>"{apt.counterProposalMessage}"</div>
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => handleAcceptProposal(apt.id)}
-                        className="btn btn-primary"
-                        style={{ fontSize: '1.1rem', padding: '12px 24px' }}
-                      >
-                        <CheckCircle2 size={20} />
-                        Oui, j'accepte ce nouvel horaire
-                      </button>
-
-                      <button
-                        onClick={() => cancelAppointment(apt.id)}
-                        className="btn btn-outline"
-                      >
-                        Refuser et annuler
-                      </button>
-                    </div>
                   </div>
                 )}
 
@@ -547,18 +452,16 @@ export const StudentMyLessons: React.FC = () => {
                     <MessageSquare size={15} color="#25D366" /> Voir le message WhatsApp
                   </button>
 
-                  {!isCounter && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Voulez-vous vraiment annuler ce cours ?')) {
-                          cancelAppointment(apt.id);
-                        }
-                      }}
-                      className="btn btn-danger-outline btn-sm"
-                    >
-                      Annuler la réservation
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Voulez-vous vraiment annuler ce cours ?')) {
+                        cancelAppointment(apt.id);
+                      }
+                    }}
+                    className="btn btn-danger-outline btn-sm"
+                  >
+                    Annuler la réservation
+                  </button>
                 </div>
               </div>
             );

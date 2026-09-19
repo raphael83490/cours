@@ -532,10 +532,27 @@ export const SimpleBookingView: React.FC = () => {
               gap: '10px'
             }}>
               <AlertCircle size={20} />
-              <span>Aymen n'a plus de créneau ouvert sur cette journée. Veuillez choisir un autre jour ci-dessus.</span>
+              <span>Aymen n'a plus de créneau ouvert sur cette journée. Les horaires étant fixes, veuillez choisir un autre jour ci-dessus.</span>
             </div>
           ) : (
             <>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 14px',
+                background: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                borderRadius: '8px',
+                color: '#065F46',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                marginBottom: '12px'
+              }}>
+                <span>🔒</span>
+                <span>Horaires fixes : Les créneaux ci-dessous sont fixes et stricts. Aucun autre horaire ne peut être proposé.</span>
+              </div>
+
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
                 <span>Créneaux disponibles pour ce jour :</span>
                 <span style={{ fontSize: '0.78rem', color: '#047857', fontWeight: 800, background: '#DCFCE7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
@@ -629,11 +646,11 @@ export const SimpleBookingView: React.FC = () => {
 
           <div>
             <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
-              Un mot ou une précision pour Aymen (Facultatif) :
+              Précision sur votre niveau ou sourates à réviser (Facultatif) :
             </label>
             <textarea
               rows={2}
-              placeholder="Ex: Niveau débutant, je souhaite réviser telle sourate..."
+              placeholder="Ex: Niveau débutant en lecture, révision sourate Al-Mulk... (les horaires sont fixes)"
               value={studentNotes}
               onChange={(e) => setStudentNotes(e.target.value)}
               style={{

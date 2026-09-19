@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useApp, normalizePhone } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
 import { AymenLoginModal } from './AymenLoginModal';
 import { 
   BookOpen, 
@@ -18,7 +18,6 @@ export const Navbar: React.FC = () => {
     setCurrentView,
     isAymenLoggedIn,
     logoutAymen,
-    currentStudentPhone,
     aymenTab,
     setAymenTab,
     appointments,
@@ -28,11 +27,6 @@ export const Navbar: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const pendingCount = appointments.filter(a => a.status === 'pending').length;
-  const myStudentAppointments = appointments.filter(a => {
-    if (!currentStudentPhone) return false;
-    return normalizePhone(a.patientPhone) === normalizePhone(currentStudentPhone);
-  });
-  const counterCount = myStudentAppointments.filter(a => a.status === 'counter_proposed').length;
 
   return (
     <>
@@ -148,18 +142,6 @@ export const Navbar: React.FC = () => {
                 >
                   <Clock size={18} />
                   Mes Inscriptions
-                  {counterCount > 0 && (
-                    <span style={{
-                      background: '#0284C7',
-                      color: 'white',
-                      fontSize: '0.75rem',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontWeight: 800
-                    }}>
-                      {counterCount} réponse{counterCount > 1 ? 's' : ''}
-                    </span>
-                  )}
                 </button>
               </>
             ) : (

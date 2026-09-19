@@ -97,7 +97,7 @@ export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClos
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
           <p style={{ fontSize: '0.92rem', color: 'var(--text-muted)', marginBottom: '18px', lineHeight: 1.5 }}>
-            Cet espace permet à <strong>Aymen</strong> de gérer les demandes de cours, d'accepter les réservations et de proposer de nouveaux horaires.
+            Cet espace permet à <strong>Aymen</strong> de gérer les demandes de cours et de valider les réservations selon les horaires fixes.
           </p>
 
           <div style={{ marginBottom: '24px' }}>

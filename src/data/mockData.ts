@@ -137,10 +137,7 @@ export const INITIAL_APPOINTMENTS: Appointment[] = [
     type: 'whatsapp',
     date: getRelativeDateString(3),
     time: '11:00',
-    status: 'counter_proposed',
-    proposedDate: getRelativeDateString(3),
-    proposedTime: '11:00',
-    counterProposalMessage: 'Aymen vous propose le nouvel horaire : ' + getRelativeDateString(3) + ' à 11:00.',
+    status: 'accepted',
     createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
     updatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
   }
@@ -156,7 +153,7 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
     appointmentId: 'apt-1',
     read: false,
     createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    deliveredVia: ['app', 'sms', 'whatsapp']
+    deliveredVia: ['app', 'whatsapp']
   },
   {
     id: 'notif-2',
@@ -167,17 +164,17 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
     appointmentId: 'apt-2',
     read: false,
     createdAt: new Date(Date.now() - 3600000 * 18).toISOString(),
-    deliveredVia: ['app', 'sms']
+    deliveredVia: ['app', 'whatsapp']
   },
   {
     id: 'notif-3',
     targetRole: 'patient',
-    title: 'Proposition d\'un autre horaire par Aymen',
-    message: 'Aymen vous propose le nouvel horaire : ' + getRelativeDateString(3) + ' à 11:00.',
-    type: 'counter_proposed',
+    title: '✅ Cours confirmé par Aymen',
+    message: 'Votre cours de Coran est validé pour le ' + getRelativeDateString(3) + ' à 11:00.',
+    type: 'accepted',
     appointmentId: 'apt-3',
     read: false,
     createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    deliveredVia: ['app', 'sms']
+    deliveredVia: ['app', 'whatsapp']
   }
 ];

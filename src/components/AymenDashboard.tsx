@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { useApp, formatDisplayDate } from '../context/AppContext';
 import type { Appointment } from '../types';
-import { CounterProposalModal } from './CounterProposalModal';
 import { 
   CheckCircle2, 
   Clock, 
   Calendar, 
-  RefreshCw, 
   XCircle, 
   Search, 
   Video, 
@@ -26,10 +24,9 @@ export const AymenDashboard: React.FC = () => {
     setAymenTab
   } = useApp();
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'accepted' | 'counter_proposed'>('pending');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'accepted'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [showPastAppointments, setShowPastAppointments] = useState(false);
-  const [selectedForCounter, setSelectedForCounter] = useState<Appointment | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [practitionerNote, setPractitionerNote] = useState('');
 
@@ -52,7 +49,6 @@ export const AymenDashboard: React.FC = () => {
 
   const pendingCount = upcomingAppointments.filter(a => a.status === 'pending').length;
   const acceptedCount = upcomingAppointments.filter(a => a.status === 'accepted').length;
-  const counterCount = upcomingAppointments.filter(a => a.status === 'counter_proposed').length;
   const declinedCount = appointments.filter(a => a.status === 'declined').length;
 
   const baseList = showPastAppointments ? appointments : upcomingAppointments;
@@ -92,7 +88,7 @@ export const AymenDashboard: React.FC = () => {
             Espace Enseignant — Aymen
           </h1>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>
-            Validez les demandes de cours, proposez d'autres créneaux et consultez votre planning
+            Validez les demandes de cours aux horaires fixes et consultez votre planning
           </p>
         </div>
 
@@ -108,7 +104,7 @@ export const AymenDashboard: React.FC = () => {
       {/* Metric Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
         gap: '16px',
         marginBottom: '28px'
       }}>
@@ -151,26 +147,6 @@ export const AymenDashboard: React.FC = () => {
           </div>
           <div style={{ fontSize: '0.82rem', color: '#047857' }}>Séances planifiées</div>
         </div>
-
-        <div 
-          className="card"
-          onClick={() => setActiveFilter('counter_proposed')}
-          style={{
-            padding: '20px',
-            cursor: 'pointer',
-            borderTop: '4px solid #0284C7',
-            background: activeFilter === 'counter_proposed' ? '#F0F9FF' : 'white'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#075985' }}>NOUVEAUX HORAIRES PROPOSÉS</span>
-            <RefreshCw size={20} color="#0284C7" />
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#075985', margin: '4px 0' }}>
-            {counterCount}
-          </div>
-          <div style={{ fontSize: '0.82rem', color: '#0284C7' }}>En attente de l'accord de l'élève</div>
-        </div>
       </div>
 
       {/* Main Inbox */}
@@ -209,18 +185,6 @@ export const AymenDashboard: React.FC = () => {
               }}
             >
               Confirmés ({acceptedCount})
-            </button>
-
-            <button
-              onClick={() => setActiveFilter('counter_proposed')}
-              className={`btn btn-sm ${activeFilter === 'counter_proposed' ? 'btn-primary' : 'btn-outline'}`}
-              style={{
-                background: activeFilter === 'counter_proposed' ? '#0284C7' : 'white',
-                borderColor: activeFilter === 'counter_proposed' ? '#0284C7' : 'var(--border-subtle)',
-                color: activeFilter === 'counter_proposed' ? 'white' : 'var(--text-main)'
-              }}
-            >
-              Propositions ({counterCount})
             </button>
 
             <button
@@ -322,7 +286,6 @@ export const AymenDashboard: React.FC = () => {
             {filteredAppointments.map((apt) => {
               const isPending = apt.status === 'pending';
               const isAccepted = apt.status === 'accepted';
-              const isCounter = apt.status === 'counter_proposed';
               const isDeclined = apt.status === 'declined';
 
               return (
@@ -356,7 +319,6 @@ export const AymenDashboard: React.FC = () => {
                     <div>
                       {isPending && <span className="badge badge-pending">En attente de validation</span>}
                       {isAccepted && <span className="badge badge-accepted">Confirmé par vous</span>}
-                      {isCounter && <span className="badge badge-counter">Proposition envoyée</span>}
                       {isDeclined && <span className="badge" style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA', fontWeight: 700 }}>Annulé / Refusé</span>}
                     </div>
                   </div>
@@ -428,14 +390,6 @@ export const AymenDashboard: React.FC = () => {
                             </button>
 
                             <button
-                              onClick={() => setSelectedForCounter(apt)}
-                              className="btn btn-outline btn-sm"
-                              style={{ borderColor: '#0284C7', color: '#0284C7' }}
-                            >
-                              <RefreshCw size={16} /> Proposer un autre horaire
-                            </button>
-
-                            <button
                               onClick={() => {
                                 const reason = window.prompt('Motif (facultatif) :', 'Indisponible');
                                 if (reason !== null) declineAppointment(apt.id, reason);
@@ -449,13 +403,6 @@ export const AymenDashboard: React.FC = () => {
 
                         {isAccepted && (
                           <>
-                            <button
-                              onClick={() => setSelectedForCounter(apt)}
-                              className="btn btn-outline btn-sm"
-                            >
-                              <RefreshCw size={15} /> Proposer de décaler
-                            </button>
-
                             <button
                               onClick={() => {
                                 const reason = window.prompt("Motif de l'annulation (facultatif) :", "Empêchement exceptionnel");
@@ -538,18 +485,6 @@ export const AymenDashboard: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Counter Proposal Dialog */}
-      {selectedForCounter && (
-        <CounterProposalModal
-          appointment={selectedForCounter}
-          onClose={() => setSelectedForCounter(null)}
-          onSuccess={() => {
-            setSelectedForCounter(null);
-            setActiveFilter('counter_proposed');
-          }}
-        />
-      )}
     </div>
   );
 };

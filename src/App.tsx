@@ -115,7 +115,7 @@ const MainApp: React.FC = () => {
                 <div>
                   <h4 style={{ fontWeight: 800, fontSize: '1.05rem', color: '#064E3B', marginBottom: '4px' }}>Notification & Confirmation</h4>
                   <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                    Aymen valide immédiatement le cours ou vous propose un créneau adapté si indisponible.
+                    Aymen confirme votre cours directement selon les créneaux fixes disponibles.
                   </p>
                 </div>
               </div>

@@ -1,13 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useApp, formatDisplayDate, formatShortDate } from '../context/AppContext';
 import type { Appointment } from '../types';
-import { CounterProposalModal } from './CounterProposalModal';
 import { 
   ChevronLeft, 
   ChevronRight, 
   Calendar as CalendarIcon, 
   CheckCircle2, 
-  RefreshCw,
   XCircle,
   MessageSquare,
   Phone,
@@ -19,7 +17,6 @@ export const AymenAgenda: React.FC = () => {
 
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [selectedForCounter, setSelectedForCounter] = useState<Appointment | null>(null);
 
   const weekDays = useMemo(() => {
     const days = [];
@@ -269,16 +266,6 @@ export const AymenAgenda: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    setSelectedForCounter(selectedAppointment);
-                    setSelectedAppointment(null);
-                  }}
-                  className="btn btn-outline btn-sm"
-                >
-                  <RefreshCw size={15} /> Proposer un autre horaire
-                </button>
-
-                <button
-                  onClick={() => {
                     const reason = window.prompt("Motif de l'annulation (facultatif) :", "Empêchement exceptionnel");
                     if (reason !== null) {
                       declineAppointment(selectedAppointment.id, reason);
@@ -336,14 +323,6 @@ export const AymenAgenda: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
-
-      {selectedForCounter && (
-        <CounterProposalModal
-          appointment={selectedForCounter}
-          onClose={() => setSelectedForCounter(null)}
-          onSuccess={() => setSelectedForCounter(null)}
-        />
       )}
     </div>
   );
