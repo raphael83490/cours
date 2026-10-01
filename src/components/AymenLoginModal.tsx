@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, X, KeyRound } from 'lucide-react';
+import { Lock, X, KeyRound, Eye, EyeOff } from 'lucide-react';
 
 interface AymenLoginModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface AymenLoginModalProps {
 export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClose }) => {
   const { loginAymen } = useApp();
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(true);
   const [error, setError] = useState(false);
 
   if (!isOpen) return null;
@@ -101,13 +102,33 @@ export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClos
           </p>
 
           <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-              Code d'accès Enseignant :
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+                Code d'accès Enseignant :
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  color: '#047857',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                <span>{showPassword ? 'Masquer' : 'Afficher'}</span>
+              </button>
+            </div>
             <div style={{ position: 'relative' }}>
               <KeyRound size={18} color="var(--primary)" style={{ position: 'absolute', left: '12px', top: '14px' }} />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 autoFocus
                 placeholder="Entrez votre mot de passe"
@@ -118,13 +139,36 @@ export const AymenLoginModal: React.FC<AymenLoginModalProps> = ({ isOpen, onClos
                 }}
                 style={{
                   width: '100%',
-                  padding: '12px 14px 12px 40px',
+                  padding: '12px 42px 12px 40px',
                   borderRadius: 'var(--radius-md)',
-                  border: `2px solid ${error ? '#EF4444' : 'var(--border-subtle)'}`,
-                  fontSize: '1rem',
+                  border: `2px solid ${error ? '#EF4444' : '#10B981'}`,
+                  background: '#F0FDF4',
+                  fontSize: '1.05rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
                   outline: 'none'
                 }}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '12px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#047857',
+                  padding: '2px'
+                }}
+                title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#047857', marginTop: '6px', fontWeight: 600 }}>
+              👁️ Les lettres sont visibles pour vous aider à taper sans erreur.
             </div>
             {error && (
               <p style={{ color: '#EF4444', fontSize: '0.82rem', marginTop: '6px', fontWeight: 600 }}>

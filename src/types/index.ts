@@ -69,7 +69,7 @@ export interface DateAvailability {
   slots: string[];
 }
 
-export interface FourteenDayItem {
+export interface SevenDayItem {
   iso: string;
   diffDays: number;
   dayName: string;
@@ -79,6 +79,8 @@ export interface FourteenDayItem {
   formattedFull: string;
   weekNumber: 1 | 2;
 }
+
+export type FourteenDayItem = SevenDayItem;
 
 export interface BlockedDate {
   date: string; // YYYY-MM-DD

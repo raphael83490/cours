@@ -313,6 +313,31 @@ app.post('/api/appointments', async (req, res) => {
     const reqDate = String(data.date).trim();
     const reqTime = String(data.time).trim();
 
+    // Vérification stricte : fenêtre des 7 prochains jours uniquement
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [y, m, d] = reqDate.split('-').map(Number);
+    const targetDate = new Date(y, m - 1, d);
+    targetDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0 || diffDays > 14) {
+      return res.status(400).json({ error: 'Les réservations sont autorisées pour la période du dimanche au dimanche.' });
+    }
+
+    // Vérification si la date est bloquée par Aymen
+    if (availability && Array.isArray(availability.blockedDates) && availability.blockedDates.some(b => b.date === reqDate)) {
+      return res.status(400).json({ error: 'Aymen n\'est pas disponible à cette date.' });
+    }
+
+    // Vérification que le créneau est bien configuré et ouvert par Aymen
+    if (availability && availability.customDateSlots && availability.customDateSlots[reqDate] !== undefined) {
+      const dayCfg = availability.customDateSlots[reqDate];
+      if (!dayCfg.enabled || !Array.isArray(dayCfg.slots) || !dayCfg.slots.includes(reqTime)) {
+        return res.status(400).json({ error: 'Ce créneau n\'est pas proposé par Aymen.' });
+      }
+    }
+
     // Règle stricte : Cours 100% individuels, aucun doublon possible
     const isConflict = appointments.some(
       a => a.date === reqDate && a.time === reqTime && (a.status === 'accepted' || a.status === 'pending') && a.id !== data.id
@@ -348,23 +373,17 @@ app.post('/api/appointments', async (req, res) => {
 
     // 1. Notification WhatsApp automatique envoyée directement à Aymen
     const AYMEN_PHONE = process.env.AYMEN_PHONE || '06 13 92 09 87';
-    const aymenAlertMsg = `📢 NOUVELLE DEMANDE DE COURS (COURS AYMEN)
-
-Salam Aleykoum Aymen, un élève vient de réserver un créneau :
-👤 Élève : ${newApt.patientName}
-📞 Téléphone : ${newApt.patientPhone}
-📖 Cours : ${newApt.motif}
-📅 Date : ${newApt.date} à ${newApt.time} (Heure de Paris)
-💻 Type : ${newApt.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel/Vidéo)'}${newApt.patientNotes ? `\n📝 Note élève : "${newApt.patientNotes}"` : ''}
-
-👉 Connectez-vous à votre espace enseignant pour valider ou refuser la réservation (cours individuel selon les horaires fixes).`;
+    const aymenAlertMsg = `Salam aleykoum Aymen, nouveau cours réservé :
+- Élève : ${newApt.patientName} (${newApt.patientPhone})
+- Horaire : ${newApt.date} à ${newApt.time} (Paris)
+- Format : ${newApt.type === 'zoom' ? 'Zoom' : 'WhatsApp'}${newApt.patientNotes ? `\n- Note : ${newApt.patientNotes}` : ''}`;
 
     sendWhatsAppDirect(AYMEN_PHONE, aymenAlertMsg).catch(err => {
       console.error('Erreur alerte WhatsApp envoyée à Aymen:', err);
     });
 
     // 2. Notification WhatsApp automatique envoyée à l'élève
-    const confirmMsg = `COURS AYMEN : Salam Aleykoum ${newApt.patientName}, votre demande de cours (${newApt.motif}) pour le ${newApt.date} à ${newApt.time} (Heure de Paris) a bien été reçue par Aymen. Vous recevrez la confirmation et la salle Zoom dès validation.`;
+    const confirmMsg = `Salam aleykoum ${newApt.patientName}, demande reçue : cours le ${newApt.date} à ${newApt.time} (Paris). En attente de validation par Aymen.`;
     sendWhatsAppDirect(newApt.patientPhone, confirmMsg).catch(() => {});
 
     return res.status(201).json({
@@ -402,7 +421,9 @@ app.put('/api/appointments/:id', async (req, res) => {
     // If Aymen just accepted the appointment: send WhatsApp automatically with Zoom link!
     if (previousStatus !== 'accepted' && updated.status === 'accepted') {
       const zoomUrl = updated.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1';
-      const msg = `COURS AYMEN : ✅ Salam Aleykoum ${updated.patientName}, Aymen a confirmé votre cours du ${updated.date} à ${updated.time} (Heure de Paris). 🎥 Lien pour rejoindre la salle Zoom : ${zoomUrl}`;
+      const isZoom = updated.type === 'zoom';
+      const zoomText = isZoom ? ` Lien Zoom : ${zoomUrl}` : ' sur WhatsApp.';
+      const msg = `Salam aleykoum ${updated.patientName}, cours validé pour le ${updated.date} à ${updated.time} (Paris).${zoomText}`;
       sendWhatsAppDirect(updated.patientPhone, msg).catch(() => {});
     }
 
@@ -433,6 +454,8 @@ app.post('/api/availability', (req, res) => {
   try {
     availability = { ...availability, ...req.body, updatedAt: new Date().toISOString() };
     saveAvailability(availability);
+    const slotsCount = availability.customDateSlots ? Object.keys(availability.customDateSlots).length : 0;
+    logActivity(`Mise à jour des disponibilités d'Aymen enregistrée (${slotsCount} dates configurées)`);
     return res.json({ success: true, availability });
   } catch (err) {
     return res.status(500).json({ error: 'Erreur disponibilités.' });

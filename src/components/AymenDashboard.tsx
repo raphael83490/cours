@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp, formatDisplayDate } from '../context/AppContext';
 import type { Appointment } from '../types';
 import { 
@@ -6,12 +6,11 @@ import {
   Clock, 
   Calendar, 
   XCircle, 
-  Search, 
-  Video, 
   Phone, 
-  Check,
   MessageSquare,
-  Trash2
+  Video,
+  Zap,
+  Sparkles
 } from 'lucide-react';
 
 export const AymenDashboard: React.FC = () => {
@@ -19,19 +18,11 @@ export const AymenDashboard: React.FC = () => {
     appointments, 
     acceptAppointment, 
     declineAppointment, 
-    deleteAppointment,
-    clearDeclinedAppointments,
-    setAymenTab
+    setAymenTab 
   } = useApp();
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'accepted'>('pending');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showPastAppointments, setShowPastAppointments] = useState(false);
-  const [acceptingId, setAcceptingId] = useState<string | null>(null);
-  const [practitionerNote, setPractitionerNote] = useState('');
-
-  // Helper to check if an appointment is upcoming (à venir)
-  const isUpcomingAppointment = (apt: Appointment): boolean => {
+  // Helper to check if an appointment is upcoming
+  const isUpcoming = (apt: Appointment): boolean => {
     if (!apt.date) return true;
     const todayStr = new Date().toISOString().split('T')[0];
     if (apt.date < todayStr) return false;
@@ -39,452 +30,381 @@ export const AymenDashboard: React.FC = () => {
     if (!apt.time) return true;
     const now = new Date();
     const [h, m] = apt.time.split(':').map(Number);
-    const aptDateTime = new Date();
-    aptDateTime.setHours(h || 0, (m || 0) + 30, 0, 0); // Visible jusqu'à 30 min après le début
-    return aptDateTime.getTime() >= now.getTime();
+    const aptTime = new Date();
+    aptTime.setHours(h || 0, (m || 0) + 30, 0, 0);
+    return aptTime.getTime() >= now.getTime();
   };
 
-  const upcomingAppointments = appointments.filter(isUpcomingAppointment);
-  const pastAppointments = appointments.filter(a => !isUpcomingAppointment(a));
+  const pendingAppointments = appointments.filter(a => a.status === 'pending' && isUpcoming(a));
+  const acceptedAppointments = appointments
+    .filter(a => a.status === 'accepted' && isUpcoming(a))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 
-  const pendingCount = upcomingAppointments.filter(a => a.status === 'pending').length;
-  const acceptedCount = upcomingAppointments.filter(a => a.status === 'accepted').length;
-  const declinedCount = appointments.filter(a => a.status === 'declined').length;
-
-  const baseList = showPastAppointments ? appointments : upcomingAppointments;
-
-  const filteredAppointments = baseList.filter(apt => {
-    if (activeFilter !== 'all' && apt.status !== activeFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (
-        apt.patientName.toLowerCase().includes(q) ||
-        apt.motif.toLowerCase().includes(q) ||
-        apt.patientPhone.includes(q)
-      );
+  const formatPhoneForWhatsApp = (raw: string) => {
+    let p = raw.replace(/[\s.-]/g, '');
+    if (p.startsWith('0')) {
+      p = '33' + p.substring(1);
     }
-    return true;
-  });
-
-  const handleConfirmAccept = (id: string) => {
-    acceptAppointment(id, practitionerNote.trim() || undefined);
-    setAcceptingId(null);
-    setPractitionerNote('');
+    return p;
   };
 
   return (
-    <div>
-      {/* Header */}
+    <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      {/* Header simplifié */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: '24px',
         flexWrap: 'wrap',
-        gap: '12px'
+        gap: '12px',
+        padding: '20px 24px',
+        background: 'linear-gradient(135deg, #064E3B 0%, #047857 100%)',
+        borderRadius: 'var(--radius-lg)',
+        color: 'white',
+        boxShadow: '0 4px 16px rgba(4, 120, 87, 0.2)'
       }}>
         <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#064E3B' }}>
-            Espace Enseignant — Aymen
-          </h1>
-          <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>
-            Validez les demandes de cours aux horaires fixes et consultez votre planning
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.4rem' }}>👋</span>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0 }}>
+              Bonjour Aymen
+            </h1>
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: '0.92rem', opacity: 0.9 }}>
+            Confirmez simplement les demandes de cours de vos élèves en un clic.
           </p>
         </div>
 
         <button
-          onClick={() => setAymenTab('agenda')}
-          className="btn btn-outline"
+          onClick={() => setAymenTab('availability')}
+          className="btn"
+          style={{
+            background: 'rgba(255, 255, 255, 0.2)',
+            color: 'white',
+            border: '1.5px solid rgba(255, 255, 255, 0.4)',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
         >
-          <Calendar size={18} />
-          Voir mon planning
+          <Zap size={18} />
+          Mes disponibilités (Dim-Dim)
         </button>
       </div>
 
-      {/* Metric Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        gap: '16px',
-        marginBottom: '28px'
-      }}>
-        <div 
-          className="card"
-          onClick={() => setActiveFilter('pending')}
-          style={{
-            padding: '20px',
-            cursor: 'pointer',
-            borderTop: '4px solid #D97706',
-            background: activeFilter === 'pending' ? '#FEF3C7' : 'white'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#92400E' }}>DEMANDES À VALIDER</span>
-            <Clock size={20} color="#D97706" />
+      {/* SECTION 1 : DEMANDES EN ATTENTE (Priorité absolue) */}
+      <div className="card" style={{ padding: '24px', border: pendingAppointments.length > 0 ? '2.5px solid #F59E0B' : '2px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: pendingAppointments.length > 0 ? '#FEF3C7' : '#DCFCE7',
+              color: pendingAppointments.length > 0 ? '#D97706' : '#166534',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 800
+            }}>
+              {pendingAppointments.length > 0 ? <Clock size={20} /> : <CheckCircle2 size={20} />}
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
+                Demandes de cours à confirmer
+              </h2>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {pendingAppointments.length === 0 
+                  ? 'Aucune nouvelle demande en attente' 
+                  : `${pendingAppointments.length} élève${pendingAppointments.length > 1 ? 's' : ''} attend${pendingAppointments.length > 1 ? 'ent' : ''} votre confirmation`}
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#92400E', margin: '4px 0' }}>
-            {pendingCount}
-          </div>
-          <div style={{ fontSize: '0.82rem', color: '#B45309' }}>En attente de votre réponse</div>
+
+          {pendingAppointments.length > 0 && (
+            <span style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              background: '#FEF3C7',
+              border: '1.5px solid #FDE68A',
+              color: '#92400E',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <Sparkles size={16} /> {pendingAppointments.length} à traiter
+            </span>
+          )}
         </div>
 
-        <div 
-          className="card"
-          onClick={() => setActiveFilter('accepted')}
-          style={{
-            padding: '20px',
-            cursor: 'pointer',
-            borderTop: '4px solid #047857',
-            background: activeFilter === 'accepted' ? '#ECFDF5' : 'white'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#065F46' }}>COURS CONFIRMÉS</span>
-            <CheckCircle2 size={20} color="#047857" />
+        {pendingAppointments.length === 0 ? (
+          <div style={{
+            padding: '32px 20px',
+            textAlign: 'center',
+            background: '#F0FDF4',
+            borderRadius: 'var(--radius-md)',
+            border: '1.5px dashed #86EFAC'
+          }}>
+            <CheckCircle2 size={36} color="#059669" style={{ margin: '0 auto 10px' }} />
+            <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#064E3B' }}>
+              Tout est à jour !
+            </div>
+            <div style={{ fontSize: '0.88rem', color: '#047857', marginTop: '4px' }}>
+              Dès qu'un élève sélectionne un créneau, sa demande apparaîtra directement ici pour confirmation.
+            </div>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#065F46', margin: '4px 0' }}>
-            {acceptedCount}
-          </div>
-          <div style={{ fontSize: '0.82rem', color: '#047857' }}>Séances planifiées</div>
-        </div>
-      </div>
-
-      {/* Main Inbox */}
-      <div className="card" style={{ padding: '24px' }}>
-        {/* Filter buttons */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          marginBottom: '20px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid var(--border-subtle)'
-        }}>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setActiveFilter('pending')}
-              className={`btn btn-sm ${activeFilter === 'pending' ? 'btn-primary' : 'btn-outline'}`}
-              style={{
-                background: activeFilter === 'pending' ? '#D97706' : 'white',
-                borderColor: activeFilter === 'pending' ? '#D97706' : 'var(--border-subtle)',
-                color: activeFilter === 'pending' ? 'white' : 'var(--text-main)'
-              }}
-            >
-              En attente ({pendingCount})
-            </button>
-
-            <button
-              onClick={() => setActiveFilter('accepted')}
-              className={`btn btn-sm ${activeFilter === 'accepted' ? 'btn-primary' : 'btn-outline'}`}
-              style={{
-                background: activeFilter === 'accepted' ? '#047857' : 'white',
-                borderColor: activeFilter === 'accepted' ? '#047857' : 'var(--border-subtle)',
-                color: activeFilter === 'accepted' ? 'white' : 'var(--text-main)'
-              }}
-            >
-              Confirmés ({acceptedCount})
-            </button>
-
-            <button
-              onClick={() => setActiveFilter('all')}
-              className={`btn btn-sm ${activeFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
-            >
-              Toutes {showPastAppointments ? `(${appointments.length})` : `(${upcomingAppointments.length})`}
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {pastAppointments.length > 0 && (
-              <button
-                onClick={() => setShowPastAppointments(!showPastAppointments)}
-                className="btn btn-sm btn-outline"
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {pendingAppointments.map((apt) => (
+              <div
+                key={apt.id}
                 style={{
-                  fontSize: '0.82rem',
-                  padding: '6px 12px',
-                  background: showPastAppointments ? '#FEF3C7' : '#F8FAFC',
-                  borderColor: showPastAppointments ? '#D97706' : '#E2E8F0',
-                  color: showPastAppointments ? '#92400E' : '#475569',
-                  fontWeight: 600
+                  padding: '20px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '2px solid #FCD34D',
+                  background: '#FFFBEB',
+                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.12)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px'
                 }}
-                title="Basculer entre uniquement les cours à venir ou inclure les cours passés"
               >
-                {showPastAppointments ? '👁️ Masquer passés' : `📂 Afficher passés (${pastAppointments.length})`}
-              </button>
-            )}
+                {/* Élève & Coordonnées */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B' }}>
+                      {apt.patientName}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '0.92rem', color: '#475569' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
+                        <Phone size={14} color="#047857" /> {apt.patientPhone}
+                      </span>
+                      <span>•</span>
+                      <span style={{ fontWeight: 700, color: '#047857' }}>
+                        Cours individuel de 30 min
+                      </span>
+                    </div>
+                  </div>
 
-            {activeFilter === 'all' && declinedCount > 0 && (
-              <button
-                onClick={() => {
-                  if (window.confirm(`Voulez-vous supprimer et nettoyer définitivement les ${declinedCount} cours annulés de la page ?`)) {
-                    clearDeclinedAppointments();
-                  }
-                }}
-                className="btn btn-sm btn-outline"
-                style={{
-                  fontSize: '0.82rem',
-                  padding: '6px 12px',
-                  background: '#FEF2F2',
-                  borderColor: '#FECACA',
-                  color: '#DC2626',
-                  fontWeight: 700,
+                  {/* Mode de cours */}
+                  <span style={{
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 700,
+                    background: apt.type === 'zoom' ? '#EFF6FF' : '#DCFCE7',
+                    color: apt.type === 'zoom' ? '#1D4ED8' : '#166534',
+                    border: `1px solid ${apt.type === 'zoom' ? '#BFDBFE' : '#86EFAC'}`,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    {apt.type === 'zoom' ? <Video size={14} /> : <MessageSquare size={14} />}
+                    {apt.type === 'zoom' ? '🎥 Zoom' : '💬 WhatsApp'}
+                  </span>
+                </div>
+
+                {/* Date et Heure demandée */}
+                <div style={{
+                  background: 'white',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #FDE68A',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
-                }}
-                title="Supprimer tous les rendez-vous annulés pour faire place nette"
-              >
-                <Trash2 size={14} /> Nettoyer les annulés ({declinedCount})
-              </button>
-            )}
+                  gap: '10px',
+                  fontWeight: 800,
+                  fontSize: '1.05rem',
+                  color: '#92400E'
+                }}>
+                  <Calendar size={20} color="#D97706" />
+                  <span style={{ textTransform: 'capitalize' }}>
+                    {formatDisplayDate(apt.date)} à {apt.time}
+                  </span>
+                  <span style={{ fontSize: '0.8rem', background: '#FEF3C7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #FCD34D' }}>
+                    Heure de Paris
+                  </span>
+                </div>
 
-            <div style={{ position: 'relative', width: '220px' }}>
-              <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '12px' }} />
-              <input
-                type="text"
-                placeholder="Rechercher élève..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px 8px 34px',
-                  borderRadius: '8px',
-                  border: '1.5px solid var(--border-subtle)',
-                  fontSize: '0.9rem',
-                  outline: 'none'
-                }}
-              />
+                {/* Message facultatif de l'élève */}
+                {apt.patientNotes && (
+                  <div style={{ fontSize: '0.9rem', color: '#475569', background: 'white', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <strong>Note de l'élève :</strong> "{apt.patientNotes}"
+                  </div>
+                )}
+
+                {/* ACTION DIRECTE DE CONFIRMATION */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px solid #FDE68A' }}>
+                  <button
+                    type="button"
+                    onClick={() => acceptAppointment(apt.id)}
+                    className="btn btn-primary"
+                    style={{
+                      background: '#047857',
+                      color: 'white',
+                      fontWeight: 800,
+                      fontSize: '1.05rem',
+                      padding: '12px 24px',
+                      borderRadius: '10px',
+                      boxShadow: '0 4px 14px rgba(4, 120, 87, 0.3)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <CheckCircle2 size={20} />
+                    Confirmer le RDV
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <a
+                      href={`https://wa.me/${formatPhoneForWhatsApp(apt.patientPhone)}?text=${encodeURIComponent(`Salam aleykoum ${apt.patientName}, j'ai bien reçu votre demande pour le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris).`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-sm btn-outline"
+                      style={{ fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <MessageSquare size={15} color="#25D366" />
+                      Écrire sur WhatsApp
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => declineAppointment(apt.id, 'Indisponible')}
+                      className="btn btn-sm btn-outline"
+                      style={{ color: '#DC2626', borderColor: '#FECACA', background: 'white', fontSize: '0.85rem' }}
+                    >
+                      <XCircle size={15} />
+                      Refuser
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 2 : COURS CONFIRMÉS À VENIR */}
+      <div className="card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: '#DCFCE7',
+              color: '#047857',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 800
+            }}>
+              <CheckCircle2 size={20} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
+                Rendez-vous confirmés ({acceptedAppointments.length})
+              </h2>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Vos prochains cours individuels programmés
+              </div>
             </div>
           </div>
         </div>
 
-        {/* List */}
-        {filteredAppointments.length === 0 ? (
-          <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <Calendar size={40} style={{ opacity: 0.35, margin: '0 auto 12px' }} />
-            <p style={{ fontWeight: 800, fontSize: '1.05rem', color: '#064E3B', marginBottom: '4px' }}>
-              {activeFilter === 'pending' ? 'Aucune demande à venir en attente' : 'Aucun cours à afficher'}
-            </p>
-            <p style={{ fontSize: '0.9rem', maxWidth: '420px', margin: '0 auto' }}>
-              {activeFilter === 'pending'
-                ? 'Toutes vos demandes de cours à venir ont été traitées.'
-                : 'Seuls les cours à venir sont affichés pour garder votre espace clair.'}
-            </p>
-            {!showPastAppointments && pastAppointments.length > 0 && (
-              <button
-                onClick={() => setShowPastAppointments(true)}
-                className="btn btn-sm btn-outline"
-                style={{ marginTop: '14px', fontSize: '0.85rem' }}
-              >
-                Afficher l'historique des {pastAppointments.length} cours passés
-              </button>
-            )}
+        {acceptedAppointments.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
+            Aucun cours confirmé pour le moment.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {filteredAppointments.map((apt) => {
-              const isPending = apt.status === 'pending';
-              const isAccepted = apt.status === 'accepted';
-              const isDeclined = apt.status === 'declined';
-
-              return (
-                <div
-                  key={apt.id}
-                  style={{
-                    padding: '20px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '2px solid var(--border-subtle)',
-                    background: isPending ? '#FFFBEB' : isDeclined ? '#F9FAFB' : 'white',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '14px',
-                    opacity: isDeclined ? 0.85 : 1
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
-                    <div>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#064E3B' }}>
-                        {apt.patientName}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Phone size={14} color="#047857" /> {apt.patientPhone}
-                        </span>
-                        <span>•</span>
-                        <span style={{ fontWeight: 600 }}>{apt.motif}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      {isPending && <span className="badge badge-pending">En attente de validation</span>}
-                      {isAccepted && <span className="badge badge-accepted">Confirmé par vous</span>}
-                      {isDeclined && <span className="badge" style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA', fontWeight: 700 }}>Annulé / Refusé</span>}
-                    </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {acceptedAppointments.map((apt) => (
+              <div
+                key={apt.id}
+                style={{
+                  padding: '16px 20px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1.5px solid #86EFAC',
+                  background: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#064E3B' }}>
+                      {apt.patientName}
+                    </span>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      background: '#DCFCE7',
+                      color: '#166534',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      border: '1px solid #86EFAC'
+                    }}>
+                      ✅ Confirmé
+                    </span>
                   </div>
-
-                  {/* Slot requested */}
-                  <div style={{
-                    background: 'white',
-                    padding: '12px 16px',
-                    borderRadius: '8px',
-                    border: '1px solid #E2E8F0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '10px'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#064E3B' }}>
-                      <Calendar size={18} color="#047857" />
-                      <span>{formatDisplayDate(apt.date)} à {apt.time}</span>
-                    </div>
-
-                    <div style={{ fontSize: '0.88rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {(apt.type === 'whatsapp' || apt.type === 'telephone') && <><MessageSquare size={14} color="#25D366" /> 💬 WhatsApp</>}
-                      {(apt.type === 'zoom' || apt.type === 'en_ligne') && <><Video size={14} color="#2563EB" /> 🎥 Zoom</>}
-                      {apt.type === 'presentiel' && <><MessageSquare size={14} color="#25D366" /> 💬 WhatsApp</>}
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '0.88rem', color: '#475569' }}>
+                    <span style={{ fontWeight: 700, color: '#065F46' }}>
+                      📅 {formatDisplayDate(apt.date)} à {apt.time} (30 min)
+                    </span>
+                    <span>•</span>
+                    <span>📞 {apt.patientPhone}</span>
+                    <span>•</span>
+                    <span>{apt.type === 'zoom' ? '🎥 Zoom' : '💬 WhatsApp'}</span>
                   </div>
-
-                  {/* Notes from student */}
-                  {apt.patientNotes && (
-                    <div style={{ fontSize: '0.9rem', color: '#475569', background: '#F8FAFC', padding: '10px 14px', borderRadius: '6px' }}>
-                      <strong>Mot de l'élève : </strong> "{apt.patientNotes}"
-                    </div>
-                  )}
-
-                  {/* Inline Accept input */}
-                  {acceptingId === apt.id && (
-                    <div className="animate-slide-up" style={{ padding: '12px', background: '#F0FDF4', borderRadius: '8px', border: '1.5px solid #86EFAC' }}>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#166534', marginBottom: '6px' }}>
-                        Message ou consigne pour l'élève (ex: "Je vous appellerai sur WhatsApp") :
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Ex: C'est noté, préparez votre Coran page..."
-                        value={practitionerNote}
-                        onChange={(e) => setPractitionerNote(e.target.value)}
-                        style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.95rem', marginBottom: '8px' }}
-                      />
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button onClick={() => setAcceptingId(null)} className="btn btn-outline btn-sm">Annuler</button>
-                        <button onClick={() => handleConfirmAccept(apt.id)} className="btn btn-primary btn-sm">
-                          <Check size={16} /> Confirmer l'acceptation
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action buttons */}
-                  {acceptingId !== apt.id && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px solid #F1F5F9' }}>
-                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        {isPending && (
-                          <>
-                            <button
-                              onClick={() => setAcceptingId(apt.id)}
-                              className="btn btn-primary btn-sm"
-                            >
-                              <CheckCircle2 size={16} /> Accepter le cours
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                const reason = window.prompt('Motif (facultatif) :', 'Indisponible');
-                                if (reason !== null) declineAppointment(apt.id, reason);
-                              }}
-                              className="btn btn-danger-outline btn-sm"
-                            >
-                              <XCircle size={16} /> Refuser
-                            </button>
-                          </>
-                        )}
-
-                        {isAccepted && (
-                          <>
-                            <button
-                              onClick={() => {
-                                const reason = window.prompt("Motif de l'annulation (facultatif) :", "Empêchement exceptionnel");
-                                if (reason !== null) {
-                                  declineAppointment(apt.id, reason);
-                                }
-                              }}
-                              className="btn btn-danger-outline btn-sm"
-                              style={{ borderColor: '#EF4444', color: '#EF4444' }}
-                            >
-                              <XCircle size={15} /> Annuler le cours
-                            </button>
-                          </>
-                        )}
-
-                        {(activeFilter === 'all' || isDeclined) && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Voulez-vous retirer définitivement la réservation de ${apt.patientName} de la page pour nettoyer ?`)) {
-                                deleteAppointment(apt.id);
-                              }
-                            }}
-                            className="btn btn-sm btn-outline"
-                            style={{
-                              borderColor: '#FECACA',
-                              color: '#DC2626',
-                              background: '#FFF5F5',
-                              fontSize: '0.82rem',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontWeight: 600
-                            }}
-                            title="Retirer et nettoyer ce rendez-vous de la page"
-                          >
-                            <Trash2 size={14} /> Supprimer / Nettoyer
-                          </button>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <a
-                          href={`https://wa.me/${(() => {
-                            let p = apt.patientPhone.replace(/[\s.-]/g, '');
-                            return p.startsWith('0') ? '33' + p.substring(1) : p;
-                          })()}?text=${encodeURIComponent(
-                            isAccepted
-                              ? `Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Lien Zoom : ${apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}`
-                              : `Salam Aleykoum ${apt.patientName}, suite à votre demande de cours (${apt.motif}) pour le ${formatDisplayDate(apt.date)} à ${apt.time}.`
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-sm"
-                          style={{
-                            background: '#25D366',
-                            color: '#064E3B',
-                            fontWeight: 800,
-                            fontSize: '0.8rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}
-                        >
-                          <MessageSquare size={14} /> WhatsApp
-                        </a>
-
-                        <a
-                          href={`tel:${apt.patientPhone.replace(/[\s.-]/g, '')}`}
-                          className="btn btn-outline btn-sm"
-                          style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        >
-                          <Phone size={14} /> Appeler
-                        </a>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
-            })}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <a
+                    href={`https://wa.me/${formatPhoneForWhatsApp(apt.patientPhone)}?text=${encodeURIComponent(`Salam aleykoum ${apt.patientName}, cours de Coran prévu le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris).`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-sm"
+                    style={{
+                      background: '#25D366',
+                      color: 'white',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <MessageSquare size={15} />
+                    WhatsApp
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Annuler le cours avec ${apt.patientName} ?`)) {
+                        declineAppointment(apt.id, 'Annulé par Aymen');
+                      }
+                    }}
+                    className="btn btn-sm btn-outline"
+                    style={{ color: '#94A3B8', borderColor: '#E2E8F0', fontSize: '0.8rem' }}
+                    title="Annuler ce cours"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
+
     </div>
   );
 };

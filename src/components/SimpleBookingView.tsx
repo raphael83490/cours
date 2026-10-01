@@ -1,42 +1,33 @@
-import React, { useState, useMemo } from 'react';
-import { useApp, formatDisplayDate, formatToLocalISO, getFourteenDaysList } from '../context/AppContext';
-import type { LessonType } from '../types';
+import React, { useState, useMemo, useRef } from 'react';
+import { useApp, formatDisplayDate, formatToLocalISO, getSevenDaysList } from '../context/AppContext';
+import type { LessonType, Appointment } from '../types';
 import confetti from 'canvas-confetti';
 import { 
   MessageSquare, 
   Video, 
   Clock, 
-  Send, 
   User, 
   AlertCircle,
-  Calendar,
   Lock,
-  Check
+  Check,
+  CheckCircle2,
+  Send
 } from 'lucide-react';
-
-const DURATION_OPTIONS = [
-  { id: '20mn', label: '20 min', title: 'Cours de 20 min' },
-  { id: '30mn', label: '30 min', title: 'Cours de 30 min' }
-];
 
 export const SimpleBookingView: React.FC = () => {
   const { bookLesson, setCurrentView, getAvailableSlotsForDate, getDateConfig, appointments } = useApp();
 
-  const [selectedDurationIndex, setSelectedDurationIndex] = useState<number>(1); // Default to 30min
   const [selectedType, setSelectedType] = useState<LessonType>('whatsapp');
+  const [confirmedAppointment, setConfirmedAppointment] = useState<Appointment | null>(null);
   
-  const fourteenDays = useMemo(() => getFourteenDaysList(), []);
-  const [activeTab, setActiveTab] = useState<'all' | 'week1' | 'week2'>('all');
+  const sevenDays = useMemo(() => getSevenDaysList(0), []);
 
-  const todayISO = useMemo(() => formatToLocalISO(new Date()), []);
-  const maxBookingDateISO = useMemo(() => {
-    return fourteenDays[fourteenDays.length - 1]?.iso || formatToLocalISO(new Date());
-  }, [fourteenDays]);
-
-  // Default to tomorrow or today if available
+  // Default to today or first active day with slots
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    const list = getFourteenDaysList();
-    return list[1]?.iso || list[0]?.iso || formatToLocalISO(new Date());
+    const list = getSevenDaysList(0);
+    const todayISO = formatToLocalISO(new Date());
+    const firstActive = list.find(d => d.iso >= todayISO && getAvailableSlotsForDate(d.iso).length > 0);
+    return firstActive?.iso || todayISO;
   });
 
   const availableSlots = useMemo(() => {
@@ -71,31 +62,26 @@ export const SimpleBookingView: React.FC = () => {
   const [studentNotes, setStudentNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const currentDuration = DURATION_OPTIONS[selectedDurationIndex] || DURATION_OPTIONS[1];
-
   const displayedDays = useMemo(() => {
-    return fourteenDays.map((d) => {
+    return sevenDays.map((d) => {
       const slots = getAvailableSlotsForDate(d.iso);
       return {
         ...d,
         hasSlots: slots.length > 0,
         slotCount: slots.length
       };
-    }).filter((d) => {
-      if (activeTab === 'week1') return d.weekNumber === 1;
-      if (activeTab === 'week2') return d.weekNumber === 2;
-      return true;
     });
-  }, [fourteenDays, activeTab, getAvailableSlotsForDate]);
+  }, [sevenDays, getAvailableSlotsForDate]);
 
-  const handleDirectDatePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-    if (!val) return;
+  const slotsRef = useRef<HTMLDivElement>(null);
 
-    if (val < todayISO) val = todayISO;
-    if (val > maxBookingDateISO) val = maxBookingDateISO;
-
-    setSelectedDate(val);
+  const handleSelectDate = (iso: string) => {
+    setSelectedDate(iso);
+    setTimeout(() => {
+      if (slotsRef.current) {
+        slotsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 30);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -112,7 +98,7 @@ export const SimpleBookingView: React.FC = () => {
           patientName: studentName.trim(),
           patientEmail: studentName.toLowerCase().replace(/\s+/g, '.') + '@eleve.fr',
           patientPhone: studentPhone.trim(),
-          motif: currentDuration.title,
+          motif: 'Cours de 30 min',
           type: selectedType,
           date: selectedDate,
           time: selectedTime,
@@ -129,7 +115,7 @@ export const SimpleBookingView: React.FC = () => {
           } catch {
             // fallback
           }
-          setCurrentView('student_my_lessons');
+          setConfirmedAppointment(apt);
         }
       } catch (err) {
         console.error('Erreur réservation:', err);
@@ -139,24 +125,194 @@ export const SimpleBookingView: React.FC = () => {
     }, 350);
   };
 
+  if (confirmedAppointment) {
+    const directWaUrl = `https://wa.me/33613920987?text=${encodeURIComponent(
+      `Salam aleykoum Aymen, réservation cours : ${formatDisplayDate(confirmedAppointment.date)} à ${confirmedAppointment.time} (Paris). ${confirmedAppointment.patientName} (${confirmedAppointment.patientPhone}).`
+    )}`;
+
+    return (
+      <div className="card animate-slide-up" style={{ padding: '36px 24px', maxWidth: '640px', margin: '0 auto', textAlign: 'center', border: '2.5px solid #059669', background: '#FFFFFF' }}>
+        <div style={{
+          width: '68px',
+          height: '68px',
+          borderRadius: '50%',
+          background: '#DCFCE7',
+          color: '#059669',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 16px',
+          boxShadow: '0 6px 18px rgba(5, 150, 105, 0.25)'
+        }}>
+          <CheckCircle2 size={38} />
+        </div>
+
+        <div style={{
+          display: 'inline-block',
+          background: '#ECFDF5',
+          border: '1.5px solid #A7F3D0',
+          borderRadius: '20px',
+          padding: '4px 14px',
+          fontSize: '0.85rem',
+          fontWeight: 800,
+          color: '#047857',
+          marginBottom: '10px'
+        }}>
+          ✅ Réservation enregistrée
+        </div>
+
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#064E3B', marginBottom: '8px' }}>
+          Demande bien prise en compte !
+        </h2>
+
+        <p style={{ fontSize: '1.05rem', color: '#334155', maxWidth: '520px', margin: '0 auto 24px', lineHeight: 1.5 }}>
+          Salam aleykoum <strong>{confirmedAppointment.patientName}</strong>, votre demande de cours a été transmise directement à Aymen.
+        </p>
+
+        {/* Détails du cours */}
+        <div style={{
+          background: '#F8FAFC',
+          border: '1.5px solid #E2E8F0',
+          borderRadius: '16px',
+          padding: '20px 24px',
+          textAlign: 'left',
+          marginBottom: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Date & Horaire :</span>
+            <strong style={{ fontSize: '1.05rem', color: '#064E3B' }}>
+              {formatDisplayDate(confirmedAppointment.date)} à {confirmedAppointment.time} (Heure de Paris)
+            </strong>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Format du cours :</span>
+            <span style={{ fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {confirmedAppointment.type === 'zoom' ? '🎥 Zoom (Visioconférence)' : '💬 WhatsApp (Appel / Vidéo)'} (30 min)
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Élève inscrit :</span>
+            <strong style={{ color: '#1E293B' }}>{confirmedAppointment.patientName} ({confirmedAppointment.patientPhone})</strong>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Statut actuel :</span>
+            <span style={{
+              background: '#FEF3C7',
+              color: '#92400E',
+              border: '1px solid #FDE68A',
+              padding: '3px 10px',
+              borderRadius: '12px',
+              fontSize: '0.85rem',
+              fontWeight: 800
+            }}>
+              🟡 En attente de validation par Aymen
+            </span>
+          </div>
+        </div>
+
+        {/* Action WhatsApp direct + Espace cours */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '440px', margin: '0 auto' }}>
+          <a
+            href={directWaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn"
+            style={{
+              background: '#25D366',
+              color: '#064E3B',
+              fontWeight: 800,
+              fontSize: '1rem',
+              padding: '14px 20px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              boxShadow: '0 4px 14px rgba(37, 211, 102, 0.3)'
+            }}
+          >
+            <MessageSquare size={20} />
+            Écrire à Aymen sur WhatsApp
+          </a>
+
+          <button
+            type="button"
+            onClick={() => setCurrentView('student_my_lessons')}
+            className="btn btn-outline"
+            style={{
+              fontWeight: 800,
+              fontSize: '0.95rem',
+              padding: '12px 18px',
+              borderRadius: '12px'
+            }}
+          >
+            Consulter mes inscriptions
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmedAppointment(null);
+              setStudentNotes('');
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#047857',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              marginTop: '6px'
+            }}
+          >
+            Réserver un autre créneau
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="card" style={{ padding: '32px 24px', border: '2px solid var(--border-subtle)' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <h2 style={{ fontSize: '1.7rem', fontWeight: 800, color: '#064E3B', marginBottom: '8px' }}>
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#064E3B', marginBottom: '10px' }}>
           Réserver un cours avec Aymen
         </h2>
-        <p style={{ fontSize: '1.05rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto' }}>
-          Suivez les 3 étapes simples ci-dessous. Aymen recevra votre demande et vous confirmera le créneau.
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 16px',
+          borderRadius: '20px',
+          background: '#DCFCE7',
+          border: '1.5px solid #86EFAC',
+          color: '#166534',
+          fontWeight: 800,
+          fontSize: '0.95rem',
+          marginBottom: '12px'
+        }}>
+          <Clock size={18} color="#166534" />
+          <span>Tous les rendez-vous sont des créneaux individuels de 30 minutes</span>
+        </div>
+        <p style={{ fontSize: '1.02rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto' }}>
+          Choisissez votre mode de cours et votre créneau horaire sur les 7 prochains jours.
         </p>
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* Étape 1 : Choisir la durée */}
-        <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+        {/* Étape 1 : Mode de cours */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
             <span style={{
-              width: '32px',
-              height: '32px',
+              width: '28px',
+              height: '28px',
               borderRadius: '50%',
               background: '#047857',
               color: 'white',
@@ -164,102 +320,49 @@ export const SimpleBookingView: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '1rem'
+              fontSize: '0.9rem'
             }}>1</span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B' }}>
-              Choisissez la durée :
-            </h3>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-            {DURATION_OPTIONS.map((opt, idx) => {
-              const isSelected = selectedDurationIndex === idx;
-              return (
-                <div
-                  key={opt.id}
-                  onClick={() => setSelectedDurationIndex(idx)}
-                  style={{
-                    padding: '18px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: `2.5px solid ${isSelected ? '#047857' : '#E2E8F0'}`,
-                    background: isSelected ? '#047857' : 'white',
-                    color: isSelected ? 'white' : '#064E3B',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    boxShadow: isSelected ? '0 4px 14px rgba(4, 120, 87, 0.25)' : 'none'
-                  }}
-                >
-                  <Clock size={22} color={isSelected ? 'white' : '#047857'} />
-                  <span style={{ fontWeight: 800, fontSize: '1.25rem' }}>
-                    {opt.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Étape 2 : Mode de cours */}
-        <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-            <span style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              background: '#047857',
-              color: 'white',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1rem'
-            }}>2</span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
               Comment souhaitez-vous faire le cours ?
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
             {/* Option 1 : WhatsApp */}
             <div
               onClick={() => setSelectedType('whatsapp')}
               style={{
-                padding: '18px 20px',
+                padding: '12px 16px',
                 borderRadius: 'var(--radius-md)',
-                border: `2.5px solid ${selectedType === 'whatsapp' ? '#25D366' : '#E2E8F0'}`,
+                border: `2px solid ${selectedType === 'whatsapp' ? '#25D366' : '#E2E8F0'}`,
                 background: selectedType === 'whatsapp' ? '#F0FDF4' : 'white',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
-                transition: 'all 0.2s ease',
-                boxShadow: selectedType === 'whatsapp' ? '0 4px 14px rgba(37, 211, 102, 0.2)' : 'none'
+                gap: '12px',
+                transition: 'all 0.15s ease',
+                boxShadow: selectedType === 'whatsapp' ? '0 3px 10px rgba(37, 211, 102, 0.18)' : 'none'
               }}
             >
               <div style={{
-                width: '46px',
-                height: '46px',
-                borderRadius: '12px',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
                 background: selectedType === 'whatsapp' ? '#25D366' : '#F1F5F9',
                 color: selectedType === 'whatsapp' ? '#064E3B' : 'var(--text-muted)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                flexShrink: 0
               }}>
-                <MessageSquare size={24} />
+                <MessageSquare size={20} />
               </div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: selectedType === 'whatsapp' ? '#064E3B' : 'var(--text-main)' }}>
+                <div style={{ fontWeight: 800, fontSize: '1.02rem', color: selectedType === 'whatsapp' ? '#064E3B' : 'var(--text-main)' }}>
                   💬 WhatsApp (Appel / Vidéo)
                 </div>
-                <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-                  Simple, direct sur votre téléphone ou PC
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Direct sur votre téléphone ou PC
                 </div>
               </div>
             </div>
@@ -268,43 +371,44 @@ export const SimpleBookingView: React.FC = () => {
             <div
               onClick={() => setSelectedType('zoom')}
               style={{
-                padding: '18px 20px',
+                padding: '12px 16px',
                 borderRadius: 'var(--radius-md)',
-                border: `2.5px solid ${selectedType === 'zoom' ? '#2563EB' : '#E2E8F0'}`,
+                border: `2px solid ${selectedType === 'zoom' ? '#2563EB' : '#E2E8F0'}`,
                 background: selectedType === 'zoom' ? '#EFF6FF' : 'white',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '14px',
-                transition: 'all 0.2s ease',
-                boxShadow: selectedType === 'zoom' ? '0 4px 14px rgba(37, 99, 235, 0.18)' : 'none'
+                gap: '12px',
+                transition: 'all 0.15s ease',
+                boxShadow: selectedType === 'zoom' ? '0 3px 10px rgba(37, 99, 235, 0.18)' : 'none'
               }}
             >
               <div style={{
-                width: '46px',
-                height: '46px',
-                borderRadius: '12px',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
                 background: selectedType === 'zoom' ? '#2563EB' : '#F1F5F9',
                 color: selectedType === 'zoom' ? 'white' : 'var(--text-muted)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                flexShrink: 0
               }}>
-                <Video size={24} />
+                <Video size={20} />
               </div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: selectedType === 'zoom' ? '#1E40AF' : 'var(--text-main)' }}>
+                <div style={{ fontWeight: 800, fontSize: '1.02rem', color: selectedType === 'zoom' ? '#1E40AF' : 'var(--text-main)' }}>
                   🎥 Zoom (Visioconférence)
                 </div>
                 <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-                  Lien de visio envoyé automatiquement
+                  Lien envoyé automatiquement
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Étape 3 : Jour et heure connectés en direct aux disponibilités d'Aymen */}
+        {/* Étape 2 : Jour et heure connectés en direct aux disponibilités d'Aymen */}
         <div style={{ marginBottom: '32px' }}>
           <div style={{
             display: 'flex',
@@ -327,12 +431,26 @@ export const SimpleBookingView: React.FC = () => {
                 justifyContent: 'center',
                 fontSize: '1rem',
                 flexShrink: 0
-              }}>3</span>
+              }}>2</span>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
-                    Choisissez le jour et l'heure (Disponibilités sur 14 jours) :
+                    Choisissez le jour et l'heure :
                   </h3>
+                  <span style={{
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    background: '#DCFCE7',
+                    border: '1.5px solid #86EFAC',
+                    color: '#166534',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    ⏱️ Créneaux de 30 min
+                  </span>
                   <span style={{
                     padding: '3px 10px',
                     borderRadius: '12px',
@@ -348,140 +466,79 @@ export const SimpleBookingView: React.FC = () => {
                     ⏰ Heure de Paris (France)
                   </span>
                 </div>
-                <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Planning glissant du <strong>{fourteenDays[0]?.formattedShort}</strong> au <strong>{fourteenDays[fourteenDays.length - 1]?.formattedShort}</strong> — tous les horaires sont en <strong>Heure de Paris</strong>.
+                <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Planning de la semaine actuelle du Dimanche au Dimanche (du <strong>{sevenDays[0]?.formattedShort}</strong> au <strong>{sevenDays[sevenDays.length - 1]?.formattedShort}</strong>) — créneaux de <strong>30 minutes</strong> en Heure de Paris.
                 </div>
               </div>
             </div>
-
-            {/* Direct date picker */}
-            <label
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
-                borderRadius: '10px',
-                border: '1.5px solid #CBD5E1',
-                background: 'white',
-                cursor: 'pointer',
-                fontSize: '0.84rem',
-                fontWeight: 600,
-                color: '#334155'
-              }}
-              title="Sélectionner directement une date précise dans le calendrier"
-            >
-              <Calendar size={15} color="#047857" />
-              <span>Autre date :</span>
-              <input
-                type="date"
-                min={todayISO}
-                max={maxBookingDateISO}
-                value={selectedDate}
-                onChange={handleDirectDatePick}
-                style={{
-                  border: 'none',
-                  outline: 'none',
-                  background: 'transparent',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  color: '#064E3B',
-                  fontWeight: 700
-                }}
-              />
-            </label>
           </div>
 
-          {/* Week Tabs */}
+          {/* Sunday to Sunday Bar Indicator */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '8px',
-            marginBottom: '14px',
+            marginBottom: '10px',
             flexWrap: 'wrap'
           }}>
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                background: activeTab === 'all' ? '#047857' : '#F1F5F9',
-                color: activeTab === 'all' ? 'white' : '#475569',
-                boxShadow: activeTab === 'all' ? '0 2px 6px rgba(4, 120, 87, 0.25)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Tous les 14 jours ({fourteenDays.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('week1')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                background: activeTab === 'week1' ? '#047857' : '#F1F5F9',
-                color: activeTab === 'week1' ? 'white' : '#475569',
-                boxShadow: activeTab === 'week1' ? '0 2px 6px rgba(4, 120, 87, 0.25)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Semaine 1 (7 premiers jours)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('week2')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
-                fontSize: '0.84rem',
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                background: activeTab === 'week2' ? '#047857' : '#F1F5F9',
-                color: activeTab === 'week2' ? 'white' : '#475569',
-                boxShadow: activeTab === 'week2' ? '0 2px 6px rgba(4, 120, 87, 0.25)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              Semaine 2 (7 jours suivants)
-            </button>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 12px',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: 800,
+              background: '#ECFDF5',
+              color: '#065F46',
+              border: '1.5px solid #A7F3D0'
+            }}>
+              📅 Semaine actuelle du Dimanche au Dimanche ({sevenDays[0]?.formattedShort} au {sevenDays[sevenDays.length - 1]?.formattedShort}) :
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Mise à jour chaque dimanche pour la semaine
+            </div>
           </div>
 
-          {/* Grid of days */}
+          {/* Grid of days (with 0-slot days in clear RED) */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(135px, 1fr))',
-            gap: '10px',
-            marginBottom: '16px'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))',
+            gap: '8px',
+            marginBottom: '10px'
           }}>
             {displayedDays.map((d) => {
               const isSelected = selectedDate === d.iso;
+              const hasSlots = d.hasSlots;
+
               return (
                 <button
                   type="button"
                   key={d.iso}
-                  onClick={() => setSelectedDate(d.iso)}
+                  onClick={() => handleSelectDate(d.iso)}
                   style={{
-                    padding: '12px 10px',
+                    padding: '10px 6px',
                     borderRadius: 'var(--radius-md)',
-                    border: `2.5px solid ${isSelected ? '#047857' : '#E2E8F0'}`,
-                    background: isSelected ? '#047857' : 'white',
-                    color: isSelected ? 'white' : '#1E293B',
+                    border: `2px solid ${
+                      isSelected ? '#047857' : hasSlots ? '#86EFAC' : '#FCA5A5'
+                    }`,
+                    background: isSelected 
+                      ? '#047857' 
+                      : hasSlots 
+                        ? 'white' 
+                        : '#FEF2F2',
+                    color: isSelected 
+                      ? 'white' 
+                      : hasSlots 
+                        ? '#1E293B' 
+                        : '#991B1B',
                     textAlign: 'center',
                     fontWeight: 700,
-                    opacity: d.hasSlots ? 1 : 0.65,
+                    opacity: 1,
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    boxShadow: isSelected ? '0 4px 12px rgba(4, 120, 87, 0.25)' : 'none',
+                    transition: 'all 0.12s ease',
+                    boxShadow: isSelected ? '0 4px 12px rgba(4, 120, 87, 0.28)' : 'none',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -489,197 +546,193 @@ export const SimpleBookingView: React.FC = () => {
                     gap: '2px'
                   }}
                 >
-                  <div style={{ fontSize: '0.98rem', fontWeight: 800 }}>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 800 }}>
                     {d.dayName}
                   </div>
-                  <div style={{ fontSize: '0.82rem', opacity: isSelected ? 0.92 : 0.75 }}>
+                  <div style={{ fontSize: '0.78rem', opacity: isSelected ? 0.95 : 0.85 }}>
                     {d.formattedShort}
                   </div>
                   <div style={{
-                    fontSize: '0.74rem',
-                    marginTop: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    background: isSelected ? 'rgba(255,255,255,0.2)' : d.hasSlots ? '#DCFCE7' : '#F1F5F9',
-                    color: isSelected ? 'white' : d.hasSlots ? '#166534' : '#94A3B8',
-                    fontWeight: 700
+                    fontSize: '0.7rem',
+                    marginTop: '3px',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
+                    background: isSelected 
+                      ? 'rgba(255,255,255,0.22)' 
+                      : hasSlots 
+                        ? '#DCFCE7' 
+                        : '#FEE2E2',
+                    color: isSelected 
+                      ? 'white' 
+                      : hasSlots 
+                        ? '#166534' 
+                        : '#DC2626',
+                    fontWeight: 800
                   }}>
-                    {d.hasSlots ? `${d.slotCount} créneau${d.slotCount > 1 ? 's' : ''}` : 'Fermé / Indispo'}
+                    {hasSlots ? `${d.slotCount} libre${d.slotCount > 1 ? 's' : ''}` : '0 créneau'}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Selected Date Summary Banner */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '8px',
-            padding: '10px 16px',
-            background: '#F8FAFC',
-            borderRadius: '8px',
-            border: '1px solid #E2E8F0',
-            marginBottom: '14px',
-            fontSize: '0.92rem'
-          }}>
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>Date sélectionnée : </span>
-              <strong style={{ color: '#064E3B', textTransform: 'capitalize' }}>
-                {formatDisplayDate(selectedDate)}
-              </strong>
-              <span style={{ marginLeft: '6px', fontSize: '0.8rem', color: '#92400E', background: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                Heure de Paris
-              </span>
-            </div>
-            {availableSlots.length > 0 && (
-              <span style={{ color: '#047857', fontWeight: 700, fontSize: '0.85rem' }}>
-                {availableSlots.length} créneau{availableSlots.length > 1 ? 's' : ''} disponible{availableSlots.length > 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-
-          {/* Bannière d'information cours 100% individuels */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            padding: '12px 16px',
-            background: '#ECFDF5',
-            border: '1.5px solid #10B981',
-            borderRadius: '10px',
-            marginBottom: '14px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#064E3B', fontWeight: 800, fontSize: '0.94rem' }}>
-              <Lock size={17} color="#047857" />
-              <span>Cours 100% Individuels — 1 seul élève par créneau :</span>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#047857', lineHeight: 1.45 }}>
-              Chaque créneau est strictement réservé pour un seul élève. <strong>Dès qu'un rendez-vous est pris, il n'est plus disponible pour les autres élèves</strong>. Les horaires sont fixes et stricts.
-            </p>
-          </div>
-
-          {!dayConfig.enabled || allDaySlots.length === 0 ? (
+          {/* Section affichant DIRECTEMENT les horaires du jour sélectionné sans scroll */}
+          <div
+            ref={slotsRef}
+            style={{
+              background: '#F8FAFC',
+              border: '2px solid #E2E8F0',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px 18px',
+              marginTop: '4px',
+              marginBottom: '20px'
+            }}
+          >
             <div style={{
-              padding: '16px',
-              background: '#FEF3C7',
-              borderRadius: '8px',
-              border: '1.5px solid #FDE68A',
-              color: '#92400E',
-              fontSize: '0.95rem',
               display: 'flex',
               alignItems: 'center',
-              gap: '10px'
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+              marginBottom: '12px',
+              paddingBottom: '10px',
+              borderBottom: '1.5px solid #E2E8F0'
             }}>
-              <AlertCircle size={20} />
-              <span>Aymen n'a plus de créneau ouvert sur cette journée. Les horaires étant fixes, veuillez choisir un autre jour ci-dessus.</span>
-            </div>
-          ) : (
-            <>
-              {availableSlots.length === 0 && (
-                <div style={{
-                  padding: '14px 16px',
-                  background: '#FEF2F2',
-                  borderRadius: '8px',
-                  border: '1.5px solid #FECACA',
-                  color: '#991B1B',
-                  fontSize: '0.92rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  marginBottom: '14px'
-                }}>
-                  <AlertCircle size={20} color="#DC2626" />
-                  <span>Tous les créneaux de cette date sont déjà pris par d'autres élèves (cours individuels). Veuillez sélectionner un autre jour dans le calendrier ci-dessus.</span>
-                </div>
-              )}
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px', flexWrap: 'wrap' }}>
-                <span>Créneaux pour ce jour :</span>
-                <span style={{ fontSize: '0.78rem', color: '#047857', fontWeight: 800, background: '#DCFCE7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #86EFAC' }}>
-                  ⏰ Heure de Paris
+              <div>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Horaires pour le : </span>
+                <strong style={{ fontSize: '1.02rem', color: '#064E3B', textTransform: 'capitalize' }}>
+                  {formatDisplayDate(selectedDate)}
+                </strong>
+                <span style={{ marginLeft: '8px', fontSize: '0.76rem', color: '#047857', background: '#DCFCE7', padding: '2px 8px', borderRadius: '6px', fontWeight: 800, border: '1px solid #86EFAC' }}>
+                  ⏱️ 30 min • Heure de Paris
                 </span>
-                {bookedSlots.length > 0 && (
-                  <span style={{ fontSize: '0.76rem', color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: '6px', border: '1px solid #CBD5E1' }}>
-                    🔒 {bookedSlots.length} déjà réservé{bookedSlots.length > 1 ? 's' : ''}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {availableSlots.length > 0 ? (
+                  <span style={{ color: '#047857', fontWeight: 800, fontSize: '0.85rem' }}>
+                    ✅ {availableSlots.length} créneau{availableSlots.length > 1 ? 's' : ''} disponible{availableSlots.length > 1 ? 's' : ''}
+                  </span>
+                ) : (
+                  <span style={{ color: '#DC2626', fontWeight: 800, fontSize: '0.85rem' }}>
+                    Aucun créneau libre
                   </span>
                 )}
-              </label>
+                {bookedSlots.length > 0 && (
+                  <span style={{ fontSize: '0.74rem', color: '#64748B', background: 'white', padding: '2px 8px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
+                    🔒 {bookedSlots.length} pris
+                  </span>
+                )}
+              </div>
+            </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                {allDaySlots.map((time) => {
-                  const isBooked = bookedSlots.includes(time.trim()) || !availableSlots.includes(time);
-                  const isSelected = selectedTime === time && !isBooked;
+            {!dayConfig.enabled || allDaySlots.length === 0 ? (
+              <div style={{
+                padding: '12px 14px',
+                background: '#FEF3C7',
+                borderRadius: '8px',
+                border: '1.5px solid #FDE68A',
+                color: '#92400E',
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <AlertCircle size={18} />
+                <span>Aymen n'a pas de créneau ouvert sur ce jour. Veuillez choisir un autre jour ci-dessus.</span>
+              </div>
+            ) : (
+              <>
+                {availableSlots.length === 0 && (
+                  <div style={{
+                    padding: '12px 14px',
+                    background: '#FEF2F2',
+                    borderRadius: '8px',
+                    border: '1.5px solid #FECACA',
+                    color: '#991B1B',
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '10px'
+                  }}>
+                    <AlertCircle size={18} color="#DC2626" />
+                    <span>Tous les créneaux de cette date sont déjà pris (cours 100% individuels). Cliquez sur un autre jour ci-dessus.</span>
+                  </div>
+                )}
 
-                  if (isBooked) {
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {allDaySlots.map((time) => {
+                    const isBooked = bookedSlots.includes(time.trim()) || !availableSlots.includes(time);
+                    const isSelected = selectedTime === time && !isBooked;
+
+                    if (isBooked) {
+                      return (
+                        <div
+                          key={time}
+                          style={{
+                            padding: '9px 13px',
+                            borderRadius: '8px',
+                            fontSize: '0.9rem',
+                            fontWeight: 700,
+                            border: '1.5px dashed #CBD5E1',
+                            background: '#F1F5F9',
+                            color: '#94A3B8',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            cursor: 'not-allowed',
+                            userSelect: 'none'
+                          }}
+                          title="Ce créneau est déjà pris par un autre élève"
+                        >
+                          <Lock size={13} color="#94A3B8" />
+                          <span style={{ textDecoration: 'line-through' }}>{time}</span>
+                          <span style={{ fontSize: '0.7rem', background: '#E2E8F0', color: '#64748B', padding: '1px 5px', borderRadius: '4px' }}>
+                            Pris
+                          </span>
+                        </div>
+                      );
+                    }
+
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={time}
+                        onClick={() => setSelectedTime(time)}
                         style={{
-                          padding: '10px 14px',
-                          borderRadius: '10px',
-                          fontSize: '0.92rem',
-                          fontWeight: 700,
-                          border: '1.5px dashed #CBD5E1',
-                          background: '#F8FAFC',
-                          color: '#94A3B8',
+                          padding: '10px 18px',
+                          borderRadius: '8px',
+                          fontSize: '1rem',
+                          fontWeight: 800,
+                          border: `2px solid ${isSelected ? '#047857' : '#86EFAC'}`,
+                          background: isSelected ? '#047857' : 'white',
+                          color: isSelected ? 'white' : '#065F46',
+                          cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
-                          cursor: 'not-allowed',
-                          userSelect: 'none'
+                          boxShadow: isSelected ? '0 4px 10px rgba(4, 120, 87, 0.25)' : 'none',
+                          transition: 'all 0.12s ease'
                         }}
-                        title="Ce créneau est déjà réservé par un autre élève (cours individuel)"
                       >
-                        <Lock size={14} color="#94A3B8" />
-                        <span style={{ textDecoration: 'line-through' }}>{time}</span>
-                        <span style={{ fontSize: '0.72rem', background: '#E2E8F0', color: '#64748B', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
-                          Déjà pris
-                        </span>
-                      </div>
+                        <span>{time}</span>
+                        {isSelected ? (
+                          <Check size={15} />
+                        ) : (
+                          <span style={{ fontSize: '0.68rem', background: '#DCFCE7', color: '#166534', padding: '2px 5px', borderRadius: '4px' }}>
+                            Dispo
+                          </span>
+                        )}
+                      </button>
                     );
-                  }
-
-                  return (
-                    <button
-                      type="button"
-                      key={time}
-                      onClick={() => setSelectedTime(time)}
-                      style={{
-                        padding: '12px 20px',
-                        borderRadius: '10px',
-                        fontSize: '1.05rem',
-                        fontWeight: 800,
-                        border: `2px solid ${isSelected ? '#047857' : '#86EFAC'}`,
-                        background: isSelected ? '#047857' : '#F0FDF4',
-                        color: isSelected ? 'white' : '#065F46',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: isSelected ? '0 4px 12px rgba(4, 120, 87, 0.25)' : 'none',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <span>{time}</span>
-                      {isSelected ? (
-                        <Check size={16} />
-                      ) : (
-                        <span style={{ fontSize: '0.72rem', background: '#DCFCE7', color: '#166534', padding: '2px 6px', borderRadius: '4px' }}>
-                          Dispo
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Coordonnées */}
+        {/* Étape 3 : Coordonnées */}
         <div style={{
           background: '#F8FAFC',
           padding: '24px',
@@ -687,9 +740,24 @@ export const SimpleBookingView: React.FC = () => {
           border: '2px solid #E2E8F0',
           marginBottom: '28px'
         }}>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#064E3B', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <User size={20} color="#047857" /> Vos coordonnées (très simple) :
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+            <span style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: '#047857',
+              color: 'white',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1rem',
+              flexShrink: 0
+            }}>3</span>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#064E3B', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <User size={20} color="#047857" /> Vos coordonnées (très simple) :
+            </h3>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '16px' }}>
             <div>

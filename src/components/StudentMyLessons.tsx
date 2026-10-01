@@ -276,7 +276,7 @@ export const StudentMyLessons: React.FC = () => {
 
                     <a
                       href={`https://wa.me/33613920987?text=${encodeURIComponent(
-                        `Salam Aleykoum Aymen, je viens de réserver un cours de ${apt.motif} pour le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mon nom : ${apt.patientName}. Merci !`
+                        `Salam aleykoum Aymen, réservation cours : ${formatDisplayDate(apt.date)} à ${apt.time} (Paris). ${apt.patientName}.`
                       )}`}
                       target="_blank"
                       rel="noreferrer"
@@ -434,9 +434,11 @@ export const StudentMyLessons: React.FC = () => {
                 }}>
                   <button
                     onClick={() => {
+                      const isZoom = apt.type === 'zoom' || apt.type === 'en_ligne';
+                      const zoomText = isZoom ? ` Lien Zoom : ${apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}` : ' sur WhatsApp.';
                       const msg = isAccepted
-                        ? `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, votre cours de ${apt.motif} est bien confirmé pour le ${formatDisplayDate(apt.date)} à ${apt.time}. Lien Zoom : ${apt.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}`
-                        : `COURS AYMEN : Salam Aleykoum ${apt.patientName}, votre demande de cours (${apt.motif}) pour le ${formatDisplayDate(apt.date)} à ${apt.time} est bien reçue par Aymen.`;
+                        ? `Salam aleykoum ${apt.patientName}, cours validé le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris).${zoomText}`
+                        : `Salam aleykoum ${apt.patientName}, demande reçue pour le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris). En attente d'Aymen.`;
                       openSimulatedDelivery({
                         channel: 'whatsapp',
                         recipientName: apt.patientName,

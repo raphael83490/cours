@@ -15,12 +15,15 @@ import {
   Heart, 
   CheckCircle2, 
   ShieldCheck,
-  Lock
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 const MainApp: React.FC = () => {
   const { currentView, aymenTab, isAymenLoggedIn, loginAymen, teacher } = useApp();
   const [aymenPassword, setAymenPassword] = React.useState('');
+  const [showAymenPassword, setShowAymenPassword] = React.useState(true);
   const [authError, setAuthError] = React.useState(false);
 
   const handleAymenLogin = (e: React.FormEvent) => {
@@ -161,24 +164,50 @@ const MainApp: React.FC = () => {
                 </p>
 
                 <form onSubmit={handleAymenLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <input
-                    type="password"
-                    placeholder="Mot de passe enseignant..."
-                    value={aymenPassword}
-                    onChange={(e) => {
-                      setAymenPassword(e.target.value);
-                      setAuthError(false);
-                    }}
-                    autoFocus
-                    style={{
-                      padding: '12px 16px',
-                      borderRadius: '8px',
-                      border: authError ? '2px solid #DC2626' : '1.5px solid var(--border)',
-                      fontSize: '1rem',
-                      outline: 'none',
-                      textAlign: 'center'
-                    }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showAymenPassword ? 'text' : 'password'}
+                      placeholder="Mot de passe enseignant..."
+                      value={aymenPassword}
+                      onChange={(e) => {
+                        setAymenPassword(e.target.value);
+                        setAuthError(false);
+                      }}
+                      autoFocus
+                      style={{
+                        width: '100%',
+                        padding: '12px 42px 12px 16px',
+                        borderRadius: '8px',
+                        border: authError ? '2px solid #DC2626' : '1.5px solid #10B981',
+                        background: '#F0FDF4',
+                        fontSize: '1.05rem',
+                        fontWeight: 600,
+                        letterSpacing: '0.04em',
+                        outline: 'none',
+                        textAlign: 'center'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAymenPassword(!showAymenPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '12px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#047857',
+                        padding: '2px'
+                      }}
+                      title={showAymenPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    >
+                      {showAymenPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#047857', fontWeight: 600 }}>
+                    👁️ Lettres visibles pour taper votre mot de passe sans faute.
+                  </div>
                   {authError && (
                     <span style={{ color: '#DC2626', fontSize: '0.85rem', fontWeight: 600 }}>
                       Mot de passe incorrect.

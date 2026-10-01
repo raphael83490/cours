@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 export const AymenAgenda: React.FC = () => {
-  const { appointments, acceptAppointment, declineAppointment, deleteAppointment } = useApp();
+  const { appointments, acceptAppointment, declineAppointment, deleteAppointment, customDateSlots, availability } = useApp();
 
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -34,9 +34,14 @@ export const AymenAgenda: React.FC = () => {
     return days;
   }, [weekOffset]);
 
-  const TIME_SLOTS = [
-    '09:30', '11:00', '14:30', '16:00', '17:30', '19:00'
-  ];
+  const timeSlots = useMemo(() => {
+    const slotSet = new Set<string>();
+    ['09:30', '11:00', '14:30', '16:00', '17:30', '19:00'].forEach(s => slotSet.add(s));
+    availability?.forEach(day => day.slots?.forEach(s => slotSet.add(s)));
+    Object.values(customDateSlots || {}).forEach(cfg => cfg.slots?.forEach(s => slotSet.add(s)));
+    appointments.forEach(a => { if (a.time) slotSet.add(a.time.trim()); });
+    return Array.from(slotSet).sort();
+  }, [availability, customDateSlots, appointments]);
 
   return (
     <div className="card" style={{ padding: '24px' }}>
@@ -155,7 +160,7 @@ export const AymenAgenda: React.FC = () => {
             </div>
           ))}
 
-          {TIME_SLOTS.map((time, tIdx) => (
+          {timeSlots.map((time, tIdx) => (
             <React.Fragment key={tIdx}>
               <div style={{
                 padding: '12px 4px',
@@ -301,8 +306,8 @@ export const AymenAgenda: React.FC = () => {
                     return p.startsWith('0') ? '33' + p.substring(1) : p;
                   })()}?text=${encodeURIComponent(
                     selectedAppointment.status === 'accepted'
-                      ? `Salam Aleykoum ${selectedAppointment.patientName}, Aymen pour votre cours de ${selectedAppointment.motif} du ${formatDisplayDate(selectedAppointment.date)} à ${selectedAppointment.time} (Heure de Paris). Salle Zoom : ${selectedAppointment.zoomLink || 'https://us05web.zoom.us/j/9133195007?pwd=k9qcjEJ7F6KnQQKhQ15wWwhsznak5f.1'}`
-                      : `Salam Aleykoum ${selectedAppointment.patientName}, suite à votre réservation (${selectedAppointment.motif}) pour le ${formatDisplayDate(selectedAppointment.date)} à ${selectedAppointment.time}.`
+                      ? `Salam aleykoum ${selectedAppointment.patientName}, cours de Coran le ${formatDisplayDate(selectedAppointment.date)} à ${selectedAppointment.time} (Paris). ${selectedAppointment.zoomLink ? `Zoom : ${selectedAppointment.zoomLink}` : 'Sur WhatsApp.'}`
+                      : `Salam aleykoum ${selectedAppointment.patientName}, concernant votre cours du ${formatDisplayDate(selectedAppointment.date)} à ${selectedAppointment.time} (Paris).`
                   )}`}
                   target="_blank"
                   rel="noreferrer"

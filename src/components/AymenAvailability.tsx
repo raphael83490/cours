@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useApp, formatDisplayDate, getFourteenDaysList } from '../context/AppContext';
+import { useApp, formatDisplayDate, getSevenDaysList } from '../context/AppContext';
 import { 
   Copy, 
   Check, 
@@ -9,7 +9,7 @@ import {
   Sun, 
   Sunset, 
   Moon, 
-  Zap,
+  Zap, 
   Sparkles, 
   RefreshCw, 
   CheckCheck, 
@@ -23,15 +23,14 @@ export const AymenAvailability: React.FC = () => {
     toggleSlotForDate,
     applyPresetToDate,
     clearSlotsForDate,
-    copyDateSlotsToTwoWeeks,
+    copyDateSlotsToWeek,
     setAllDatesOpen,
-    openAll14DaysWithDefaultSlots,
+    openAll7DaysWithDefaultSlots,
     blockedDates,
     addBlockedDate,
     removeBlockedDate
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'all' | 'week1' | 'week2'>('all');
   const [newBlockedDate, setNewBlockedDate] = useState('');
   const [blockedReason, setBlockedReason] = useState('');
 
@@ -48,25 +47,15 @@ export const AymenAvailability: React.FC = () => {
     fullDay: ['09:30', '11:00', '14:30', '16:00', '17:30', '19:00']
   };
 
-  // Get the 14 calendar days starting from today
-  const fourteenDays = useMemo(() => getFourteenDaysList(), []);
-
-  // Filter days according to active tab
-  const displayedDays = useMemo(() => {
-    if (activeTab === 'week1') {
-      return fourteenDays.filter(d => d.weekNumber === 1);
-    }
-    if (activeTab === 'week2') {
-      return fourteenDays.filter(d => d.weekNumber === 2);
-    }
-    return fourteenDays;
-  }, [fourteenDays, activeTab]);
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const sevenDays = useMemo(() => getSevenDaysList(weekOffset), [weekOffset]);
+  const displayedDays = sevenDays;
 
   // Global statistics
   const stats = useMemo(() => {
     let openDays = 0;
     let totalSlots = 0;
-    fourteenDays.forEach(d => {
+    sevenDays.forEach(d => {
       const cfg = getDateConfig(d.iso);
       if (cfg.enabled) {
         openDays++;
@@ -74,7 +63,7 @@ export const AymenAvailability: React.FC = () => {
       }
     });
     return { openDays, totalSlots };
-  }, [fourteenDays, getDateConfig]);
+  }, [sevenDays, getDateConfig]);
 
   const handleAddBlocked = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +95,7 @@ export const AymenAvailability: React.FC = () => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#064E3B', margin: 0 }}>
-                  Planning des Disponibilités sur 14 Jours
+                  Planning des Disponibilités (du Dimanche au Dimanche)
                 </h2>
                 <span style={{
                   padding: '3px 10px',
@@ -122,11 +111,58 @@ export const AymenAvailability: React.FC = () => {
                 }}>
                   ⏰ Heure de Paris
                 </span>
+                <span style={{
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  background: '#DCFCE7',
+                  border: '1px solid #86EFAC',
+                  color: '#166534',
+                  fontSize: '0.78rem',
+                  fontWeight: 800
+                }}>
+                  Dimanche au Dimanche ({sevenDays.length} jours)
+                </span>
               </div>
               <p style={{ fontSize: '0.92rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-                Gérez vos créneaux date par date sur les <strong>14 prochains jours glissants</strong> (horaires en <strong>Heure de Paris</strong>). Les modifications sont <strong>instantanées</strong> pour les élèves.
+                Gérez vos créneaux du <strong>dimanche au dimanche</strong>. Les jours sans créneaux sont affichés en rouge.
               </p>
             </div>
+          </div>
+
+          {/* Week switcher buttons */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setWeekOffset(0)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                border: `2px solid ${weekOffset === 0 ? '#047857' : '#CBD5E1'}`,
+                background: weekOffset === 0 ? '#047857' : 'white',
+                color: weekOffset === 0 ? 'white' : '#475569',
+                cursor: 'pointer'
+              }}
+            >
+              Cette semaine (Dim - Dim)
+            </button>
+            <button
+              type="button"
+              onClick={() => setWeekOffset(1)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                border: `2px solid ${weekOffset === 1 ? '#047857' : '#CBD5E1'}`,
+                background: weekOffset === 1 ? '#047857' : 'white',
+                color: weekOffset === 1 ? 'white' : '#475569',
+                cursor: 'pointer'
+              }}
+            >
+              Semaine suivante (Dim - Dim)
+            </button>
           </div>
 
           {/* Quick stats pills */}
@@ -144,7 +180,7 @@ export const AymenAvailability: React.FC = () => {
               gap: '6px'
             }}>
               <CheckCheck size={16} color="#047857" />
-              <span><strong>{stats.openDays} / 14</strong> jours ouverts</span>
+              <span><strong>{stats.openDays} / 7</strong> jours ouverts</span>
             </div>
 
             <div style={{
@@ -166,7 +202,7 @@ export const AymenAvailability: React.FC = () => {
         </div>
       </div>
 
-      {/* Control Bar: Week Tabs & Batch Actions */}
+      {/* Control Bar: 7 Days & Batch Actions */}
       <div className="card" style={{
         padding: '14px 18px',
         marginBottom: '24px',
@@ -178,64 +214,24 @@ export const AymenAvailability: React.FC = () => {
         background: '#F8FAFC',
         border: '1.5px solid #E2E8F0'
       }}>
-        {/* Tabs */}
+        {/* Indicator */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('all')}
+          <div
             style={{
               padding: '8px 16px',
               borderRadius: '10px',
               fontWeight: 800,
               fontSize: '0.88rem',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'all' ? '#047857' : 'white',
-              color: activeTab === 'all' ? 'white' : '#475569',
-              boxShadow: activeTab === 'all' ? '0 2px 8px rgba(4, 120, 87, 0.25)' : 'none',
-              transition: 'all 0.15s ease'
+              background: '#047857',
+              color: 'white',
+              boxShadow: '0 2px 8px rgba(4, 120, 87, 0.25)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
             }}
           >
-            Tous les 14 jours ({fourteenDays.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('week1')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '10px',
-              fontWeight: 800,
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'week1' ? '#047857' : 'white',
-              color: activeTab === 'week1' ? 'white' : '#475569',
-              boxShadow: activeTab === 'week1' ? '0 2px 8px rgba(4, 120, 87, 0.25)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            Semaine 1 (7 premiers jours)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('week2')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '10px',
-              fontWeight: 800,
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              border: 'none',
-              background: activeTab === 'week2' ? '#047857' : 'white',
-              color: activeTab === 'week2' ? 'white' : '#475569',
-              boxShadow: activeTab === 'week2' ? '0 2px 8px rgba(4, 120, 87, 0.25)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            Semaine 2 (7 jours suivants)
-          </button>
+            📅 7 prochains jours glissants ({sevenDays.length})
+          </div>
         </div>
 
         {/* Global actions */}
@@ -245,9 +241,9 @@ export const AymenAvailability: React.FC = () => {
             onClick={() => setAllDatesOpen(true)}
             className="btn btn-outline btn-sm"
             style={{ fontSize: '0.82rem', padding: '6px 12px', color: '#047857', borderColor: '#86EFAC' }}
-            title="Activer tous les 14 jours"
+            title="Activer tous les 7 jours"
           >
-            <Check size={14} /> Tout ouvrir
+            <Check size={14} /> Tout ouvrir (7j)
           </button>
 
           <button
@@ -255,24 +251,24 @@ export const AymenAvailability: React.FC = () => {
             onClick={() => setAllDatesOpen(false)}
             className="btn btn-outline btn-sm"
             style={{ fontSize: '0.82rem', padding: '6px 12px', color: '#64748B', borderColor: '#CBD5E1' }}
-            title="Désactiver tous les 14 jours"
+            title="Désactiver tous les 7 jours"
           >
-            <XCircle size={14} /> Tout fermer
+            <XCircle size={14} /> Tout fermer (7j)
           </button>
 
           <button
             type="button"
-            onClick={openAll14DaysWithDefaultSlots}
+            onClick={openAll7DaysWithDefaultSlots}
             className="btn btn-outline btn-sm"
             style={{ fontSize: '0.82rem', padding: '6px 12px', color: '#0284C7', borderColor: '#BAE6FD' }}
-            title="Rétablir les horaires standards sur les 14 jours"
+            title="Rétablir les horaires standards sur les 7 jours"
           >
-            <RefreshCw size={14} /> Réinitialiser
+            <RefreshCw size={14} /> Réinitialiser (7j)
           </button>
         </div>
       </div>
 
-      {/* 14 Days List */}
+      {/* 7 Days List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '36px' }}>
         {displayedDays.map((day) => {
           const config = getDateConfig(day.iso);
@@ -285,8 +281,8 @@ export const AymenAvailability: React.FC = () => {
               className="card"
               style={{
                 padding: '20px 24px',
-                border: `2px solid ${isToday ? '#059669' : config.enabled ? '#86EFAC' : '#E2E8F0'}`,
-                background: config.enabled ? 'white' : '#F8FAFC',
+                border: `2px solid ${isToday ? '#059669' : config.enabled ? '#86EFAC' : '#FCA5A5'}`,
+                background: config.enabled ? 'white' : '#FEF2F2',
                 transition: 'all 0.2s ease',
                 boxShadow: isToday ? '0 4px 16px rgba(5, 150, 105, 0.12)' : 'none',
                 position: 'relative'
@@ -312,13 +308,13 @@ export const AymenAvailability: React.FC = () => {
                       borderRadius: '24px',
                       fontWeight: 800,
                       fontSize: '0.94rem',
-                      background: config.enabled ? '#047857' : '#E2E8F0',
-                      color: config.enabled ? 'white' : '#64748B',
+                      background: config.enabled ? '#047857' : '#FEE2E2',
+                      color: config.enabled ? 'white' : '#DC2626',
+                      border: config.enabled ? 'none' : '1.5px solid #FCA5A5',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
                       cursor: 'pointer',
-                      border: 'none',
                       transition: 'all 0.15s ease'
                     }}
                   >
@@ -326,10 +322,10 @@ export const AymenAvailability: React.FC = () => {
                       width: '10px',
                       height: '10px',
                       borderRadius: '50%',
-                      background: config.enabled ? '#4ADE80' : '#94A3B8',
+                      background: config.enabled ? '#4ADE80' : '#DC2626',
                       boxShadow: config.enabled ? '0 0 8px #4ADE80' : 'none'
                     }} />
-                    {config.enabled ? 'Ouvert' : 'Fermé (Repos)'}
+                    {config.enabled ? 'Ouvert' : 'Fermé (0 créneau)'}
                   </button>
 
                   {/* Day Name and Date */}
@@ -441,12 +437,12 @@ export const AymenAvailability: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => copyDateSlotsToTwoWeeks(day.iso)}
+                      onClick={() => copyDateSlotsToWeek(day.iso)}
                       className="btn btn-outline btn-sm"
                       style={{ padding: '4px 10px', fontSize: '0.78rem', color: '#047857', borderColor: '#86EFAC' }}
-                      title="Appliquer ces mêmes créneaux aux 14 jours glissants"
+                      title="Appliquer ces mêmes créneaux aux 7 jours glissants"
                     >
-                      <Copy size={12} /> Dupliquer sur les 14j
+                      <Copy size={12} /> Dupliquer sur les 7j
                     </button>
 
                     <button

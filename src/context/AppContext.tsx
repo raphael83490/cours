@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { 
   Appointment, 
   AppNotification, 
@@ -9,7 +9,7 @@ import type {
   BlockedDate, 
   SmsConfig,
   WhatsAppStatus,
-  FourteenDayItem
+  SevenDayItem
 } from '../types';
 import { 
   INITIAL_APPOINTMENTS, 
@@ -95,7 +95,7 @@ interface AppContextType {
   serverStatus: 'connected' | 'offline' | 'checking';
   checkServerHealth: () => Promise<boolean>;
 
-  // Availability Management for Aymen (14 days rolling window)
+  // Availability Management for Aymen (7 days rolling window)
   getAvailableSlotsForDate: (dateStr: string) => string[];
   customDateSlots: Record<string, { enabled: boolean; slots: string[] }>;
   getDateConfig: (dateStr: string) => { enabled: boolean; slots: string[]; isCustom: boolean };
@@ -105,10 +105,13 @@ interface AppContextType {
   setSlotsForDate: (dateStr: string, slots: string[]) => void;
   applyPresetToDate: (dateStr: string, presetSlots: string[]) => void;
   clearSlotsForDate: (dateStr: string) => void;
+  copyDateSlotsToWeek: (sourceDateStr: string) => void;
   copyDateSlotsToTwoWeeks: (sourceDateStr: string) => void;
   setAllDatesOpen: (open: boolean) => void;
+  openAll7DaysWithDefaultSlots: () => void;
   openAll14DaysWithDefaultSlots: () => void;
   resetDateToDefault: (dateStr: string) => void;
+  resetAllToDefault: () => void;
   resetAllTwoWeeksToDefault: () => void;
   toggleDayEnabled: (dayOfWeek: number) => void;
   toggleSlotForDay: (dayOfWeek: number, slot: string) => void;
@@ -317,6 +320,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_RAILWAY_URL;
   };
 
+  const customDateSlotsRef = useRef(customDateSlots);
+  customDateSlotsRef.current = customDateSlots;
+
+  const blockedDatesRef = useRef(blockedDates);
+  blockedDatesRef.current = blockedDates;
+
+  const availabilityRef = useRef(availability);
+  availabilityRef.current = availability;
+
+  const syncAvailabilityToServer = (
+    newCustomSlots?: Record<string, { enabled: boolean; slots: string[] }>,
+    newBlocked?: BlockedDate[],
+    newWeekly?: DayAvailability[]
+  ) => {
+    const api = getEffectiveApiUrl();
+    const payload = {
+      customDateSlots: newCustomSlots !== undefined ? newCustomSlots : customDateSlotsRef.current,
+      blockedDates: newBlocked !== undefined ? newBlocked : blockedDatesRef.current,
+      weeklyAvailability: newWeekly !== undefined ? newWeekly : availabilityRef.current
+    };
+    fetch(`${api}/api/availability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.warn('Sync availability failed:', err));
+  };
+
   const updateBackendUrl = (url: string) => {
     const cleaned = url.trim().replace(/\/$/, '');
     localStorage.setItem('aymen_backend_url', cleaned);
@@ -341,7 +371,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   };
 
-  // Poll server for new appointments in real-time
+  // Poll server for new appointments and availability in real-time
   useEffect(() => {
     let isSubscribed = true;
 
@@ -397,6 +427,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (res.ok) {
           const data = await res.json();
           if (isSubscribed) setWhatsAppStatus(data);
+        }
+      } catch {}
+
+      // Sync availability (customDateSlots, blockedDates, weeklyAvailability)
+      try {
+        const resAvail = await fetch(`${api}/api/availability`, { cache: 'no-store' });
+        if (resAvail.ok) {
+          const availData = await resAvail.json();
+          if (!isSubscribed) return;
+
+          const serverSlots = availData.customDateSlots;
+          const hasServerSlots = serverSlots && typeof serverSlots === 'object' && Object.keys(serverSlots).length > 0;
+          
+          if (hasServerSlots) {
+            setCustomDateSlots(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(serverSlots)) {
+                return serverSlots;
+              }
+              return prev;
+            });
+          } else {
+            // If server has no customDateSlots yet, but this client already has some configured locally,
+            // automatically upload them to the server so they become global for all students!
+            const localSlots = customDateSlotsRef.current;
+            if (localSlots && Object.keys(localSlots).length > 0) {
+              fetch(`${api}/api/availability`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customDateSlots: localSlots,
+                  blockedDates: blockedDatesRef.current,
+                  weeklyAvailability: availabilityRef.current
+                })
+              }).catch(() => {});
+            }
+          }
+
+          if (Array.isArray(availData.blockedDates)) {
+            setBlockedDates(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(availData.blockedDates)) {
+                return availData.blockedDates;
+              }
+              return prev;
+            });
+          }
+
+          if (Array.isArray(availData.weeklyAvailability)) {
+            setAvailability(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(availData.weeklyAvailability)) {
+                return availData.weeklyAvailability;
+              }
+              return prev;
+            });
+          }
         }
       } catch {}
     };
@@ -512,9 +596,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Helper to get dynamically available slots for a given date (strictly bounded to max 14 days rolling window)
+  // Helper to get dynamically available slots for a given date (strictly bounded to max 7 days rolling window)
   const getAvailableSlotsForDate = (dateStr: string): string[] => {
-    // 1. Strict 14-day rolling window check (0 <= diffDays < 14)
+    // 1. Strict 7-day rolling window check (0 <= diffDays < 7)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -524,8 +608,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Refuse booking in the past or beyond 14 days
-    if (diffDays < 0 || diffDays >= 14) {
+    // Refuse booking in the past or beyond 14 days (cycle du dimanche au dimanche)
+    if (diffDays < 0 || diffDays > 14) {
       return [];
     }
 
@@ -561,28 +645,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // 14-Day Date Specific Availability Actions for Aymen
+  // 7-Day Date Specific Availability Actions for Aymen (Automatically synced to server)
   const toggleDateEnabled = (dateStr: string) => {
     const current = getDateConfig(dateStr);
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       [dateStr]: {
         enabled: !current.enabled,
         slots: current.slots
       }
-    }));
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
     showToast('Disponibilité mise à jour', `Le ${formatDisplayDate(dateStr)} est maintenant ${!current.enabled ? 'Ouvert' : 'Fermé'}.`, 'info');
   };
 
   const setDateEnabled = (dateStr: string, enabled: boolean) => {
     const current = getDateConfig(dateStr);
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       [dateStr]: {
         enabled,
         slots: current.slots
       }
-    }));
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
   };
 
   const toggleSlotForDate = (dateStr: string, slot: string) => {
@@ -592,56 +680,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? current.slots.filter(s => s !== slot) 
       : [...current.slots, slot].sort();
 
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       [dateStr]: {
         enabled: true,
         slots: newSlots
       }
-    }));
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
   };
 
   const setSlotsForDate = (dateStr: string, slots: string[]) => {
     const current = getDateConfig(dateStr);
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       [dateStr]: {
         enabled: slots.length > 0 ? true : current.enabled,
         slots: [...slots].sort()
       }
-    }));
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
   };
 
   const applyPresetToDate = (dateStr: string, presetSlots: string[]) => {
     const current = getDateConfig(dateStr);
     const merged = Array.from(new Set([...current.slots, ...presetSlots])).sort();
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       [dateStr]: {
         enabled: true,
         slots: merged
       }
-    }));
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
   };
 
   const clearSlotsForDate = (dateStr: string) => {
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       [dateStr]: {
         enabled: false,
         slots: []
       }
-    }));
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
   };
 
-  const copyDateSlotsToTwoWeeks = (sourceDateStr: string) => {
+  const copyDateSlotsToWeek = (sourceDateStr: string) => {
     const source = getDateConfig(sourceDateStr);
     const updates: Record<string, { enabled: boolean; slots: string[] }> = {};
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const iso = formatToLocalISO(d);
@@ -651,19 +747,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       ...updates
-    }));
-    showToast('Planning appliqué', `Les horaires du ${formatDisplayDate(sourceDateStr)} ont été appliqués sur les 14 jours.`, 'success');
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
+    showToast('Planning appliqué', `Les horaires du ${formatDisplayDate(sourceDateStr)} ont été appliqués sur les 7 jours.`, 'success');
   };
+
+  const copyDateSlotsToTwoWeeks = copyDateSlotsToWeek;
 
   const setAllDatesOpen = (open: boolean) => {
     const updates: Record<string, { enabled: boolean; slots: string[] }> = {};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const iso = formatToLocalISO(d);
@@ -676,19 +776,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    setCustomDateSlots(prev => ({
-      ...prev,
+    const nextSlots = {
+      ...customDateSlots,
       ...updates
-    }));
-    showToast('Disponibilités mises à jour', open ? 'Les 14 jours sont maintenant ouverts.' : 'Les 14 jours ont été fermés.', 'info');
+    };
+    setCustomDateSlots(nextSlots);
+    syncAvailabilityToServer(nextSlots);
+    showToast('Disponibilités mises à jour', open ? 'Les 7 jours sont maintenant ouverts.' : 'Les 7 jours ont été fermés.', 'info');
   };
 
-  const openAll14DaysWithDefaultSlots = () => {
+  const openAll7DaysWithDefaultSlots = () => {
     const updates: Record<string, { enabled: boolean; slots: string[] }> = {};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const iso = formatToLocalISO(d);
@@ -701,36 +803,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setCustomDateSlots(updates);
-    showToast('Horaires réinitialisés', 'Les 14 jours ont été réinitialisés avec vos horaires standards.', 'info');
+    syncAvailabilityToServer(updates);
+    showToast('Horaires réinitialisés', 'Les 7 jours ont été réinitialisés avec vos horaires standards.', 'info');
   };
 
+  const openAll14DaysWithDefaultSlots = openAll7DaysWithDefaultSlots;
+
   const resetDateToDefault = (dateStr: string) => {
-    setCustomDateSlots(prev => {
-      const copy = { ...prev };
-      delete copy[dateStr];
-      return copy;
-    });
+    const copy = { ...customDateSlots };
+    delete copy[dateStr];
+    setCustomDateSlots(copy);
+    syncAvailabilityToServer(copy);
     showToast('Horaires réinitialisés', `Le ${formatDisplayDate(dateStr)} utilise de nouveau l'horaire habituel.`, 'info');
   };
 
-  const resetAllTwoWeeksToDefault = () => {
+  const resetAllToDefault = () => {
     setCustomDateSlots({});
-    showToast('Réinitialisation', 'Les 14 jours reprennent les horaires habituels par défaut.', 'info');
+    syncAvailabilityToServer({});
+    showToast('Réinitialisation', 'Les 7 jours reprennent les horaires habituels par défaut.', 'info');
   };
 
-  // Availability toggles
+  const resetAllTwoWeeksToDefault = resetAllToDefault;
+
+  // Availability toggles (Weekly template)
   const toggleDayEnabled = (dayOfWeek: number) => {
-    setAvailability(prev => prev.map(day => {
+    const nextWeekly = availability.map(day => {
       if (day.dayOfWeek === dayOfWeek) {
         return { ...day, enabled: !day.enabled };
       }
       return day;
-    }));
+    });
+    setAvailability(nextWeekly);
+    syncAvailabilityToServer(undefined, undefined, nextWeekly);
     showToast('Disponibilité mise à jour', 'Le jour a été modifié.', 'info');
   };
 
   const toggleSlotForDay = (dayOfWeek: number, slot: string) => {
-    setAvailability(prev => prev.map(day => {
+    const nextWeekly = availability.map(day => {
       if (day.dayOfWeek === dayOfWeek) {
         const exists = day.slots.includes(slot);
         const newSlots = exists 
@@ -739,37 +848,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { ...day, slots: newSlots };
       }
       return day;
-    }));
+    });
+    setAvailability(nextWeekly);
+    syncAvailabilityToServer(undefined, undefined, nextWeekly);
   };
 
   const setSlotsForDay = (dayOfWeek: number, slots: string[]) => {
-    setAvailability(prev => prev.map(day => {
+    const nextWeekly = availability.map(day => {
       if (day.dayOfWeek === dayOfWeek) {
         return { ...day, slots };
       }
       return day;
-    }));
+    });
+    setAvailability(nextWeekly);
+    syncAvailabilityToServer(undefined, undefined, nextWeekly);
   };
 
   const copyAvailabilityToAllDays = (sourceDayOfWeek: number) => {
     const source = availability.find(a => a.dayOfWeek === sourceDayOfWeek);
     if (!source) return;
 
-    setAvailability(prev => prev.map(day => {
-      if (day.dayOfWeek === 0) return day; // keep sunday closed or copy too
+    const nextWeekly = availability.map(day => {
+      if (day.dayOfWeek === 0) return day;
       return { ...day, enabled: source.enabled, slots: [...source.slots] };
-    }));
+    });
+    setAvailability(nextWeekly);
+    syncAvailabilityToServer(undefined, undefined, nextWeekly);
     showToast('Horaires dupliqués', `Les créneaux de ${source.dayName} ont été copiés sur la semaine.`, 'success');
   };
 
   const addBlockedDate = (date: string, reason?: string) => {
     if (!date) return;
-    setBlockedDates(prev => [...prev.filter(b => b.date !== date), { date, reason }]);
+    const nextBlocked = [...blockedDates.filter(b => b.date !== date), { date, reason }];
+    setBlockedDates(nextBlocked);
+    syncAvailabilityToServer(undefined, nextBlocked);
     showToast('Date bloquée', `Vous êtes marqué comme indisponible le ${formatDisplayDate(date)}.`, 'warning');
   };
 
   const removeBlockedDate = (date: string) => {
-    setBlockedDates(prev => prev.filter(b => b.date !== date));
+    const nextBlocked = blockedDates.filter(b => b.date !== date);
+    setBlockedDates(nextBlocked);
+    syncAvailabilityToServer(undefined, nextBlocked);
     showToast('Disponibilité rétablie', `Le ${formatDisplayDate(date)} est de nouveau ouvert.`, 'success');
   };
 
@@ -834,7 +953,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanDate = data.date.trim();
     const cleanTime = data.time.trim();
 
-    // Vérification stricte de disponibilité (cours 100% individuels)
+    // 1. Vérification stricte : fenêtre des 7 jours glissants
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [y, m, d] = cleanDate.split('-').map(Number);
+    const targetDate = new Date(y, m - 1, d);
+    targetDate.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0 || diffDays > 14) {
+      showToast('Réservation impossible', 'Les réservations sont autorisées pour la période du dimanche au dimanche.', 'error');
+      throw new Error('DATE_OUT_OF_BOUNDS');
+    }
+
+    // 2. Vérification que le créneau est bien proposé et ouvert par Aymen
+    const availableSlots = getAvailableSlotsForDate(cleanDate);
+    if (!availableSlots.includes(cleanTime)) {
+      showToast('Créneau non disponible', 'Ce créneau n\'est pas ouvert à la réservation par Aymen.', 'error');
+      throw new Error('SLOT_NOT_AVAILABLE');
+    }
+
+    // 3. Vérification stricte de disponibilité (cours 100% individuels)
     const isConflict = appointments.some(
       a => a.date === cleanDate && a.time.trim() === cleanTime && (a.status === 'accepted' || a.status === 'pending')
     );
@@ -879,8 +1017,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const notifForAymen: AppNotification = {
       id: 'notif-' + Date.now(),
       targetRole: 'aymen',
-      title: '📖 Nouvelle demande de cours reçue',
-      message: `${data.patientName} a demandé un cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${data.type === 'zoom' ? 'Zoom' : 'WhatsApp'}).`,
+      title: '📖 Demande reçue',
+      message: `${data.patientName} : cours le ${formatDisplayDate(data.date)} à ${data.time} (Paris) (${data.type === 'zoom' ? 'Zoom' : 'WhatsApp'}).`,
       type: 'booking_received',
       appointmentId: newApt.id,
       appointmentData: newApt,
@@ -892,11 +1030,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [notifForAymen, ...prev]);
     playNotificationSound();
 
-    const modeLabel = data.type === 'zoom' ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
-    const waBody = `COURS AYMEN : Salam Aleykoum ${data.patientName}, votre demande de cours (${data.motif}) pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}) a bien été transmise à Aymen. Vous recevrez la confirmation et le lien dès validation.`;
+    const waBody = `Salam aleykoum ${data.patientName}, demande reçue : cours le ${formatDisplayDate(data.date)} à ${data.time} (Paris). En attente de validation par Aymen.`;
 
     const aymenWhatsAppDirectUrl = `https://wa.me/33613920987?text=${encodeURIComponent(
-      `Salam Aleykoum Aymen, je viens de réserver un cours de ${data.motif} pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris) (${modeLabel}). Mon nom : ${data.patientName}. Merci !`
+      `Salam aleykoum Aymen, réservation cours : ${formatDisplayDate(data.date)} à ${data.time} (Paris). ${data.patientName} (${data.patientPhone}).`
     )}`;
 
     openSimulatedDelivery({
@@ -904,15 +1041,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       recipientName: 'Aymen (06 13 92 09 87)',
       recipientContact: '06 13 92 09 87',
       body: waBody,
-      badge: 'Demande transmise directement à Aymen',
-      dateInfo: `${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris)`,
+      badge: 'Demande transmise à Aymen',
+      dateInfo: `${formatDisplayDate(data.date)} à ${data.time} (Paris)`,
       nativeWhatsAppUrl: aymenWhatsAppDirectUrl,
-      statusInfo: 'Transmis en direct sur WhatsApp'
+      statusInfo: 'Transmis sur WhatsApp'
     });
 
     showToast(
-      'Demande de cours envoyée !',
-      `Votre demande a bien été transmise à Aymen pour le ${formatDisplayDate(data.date)} à ${data.time} (Heure de Paris).`,
+      'Demande prise en compte !',
+      `Cours le ${formatDisplayDate(data.date)} à ${data.time} (Paris) transmis à Aymen.`,
       'success'
     );
 
@@ -953,8 +1090,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const notifForStudent: AppNotification = {
       id: 'notif-' + Date.now(),
       targetRole: 'patient',
-      title: '✅ Cours confirmé par Aymen !',
-      message: `Votre cours du ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris) est validé (${apt.type === 'zoom' ? 'sur Zoom' : 'sur WhatsApp'}).${note ? ` Message d'Aymen : "${note}"` : ''}`,
+      title: '✅ Cours confirmé !',
+      message: `Cours validé le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris) (${apt.type === 'zoom' ? 'Zoom' : 'WhatsApp'}).${note ? ` Note : "${note}"` : ''}`,
       type: 'accepted',
       appointmentId: id,
       appointmentData: updatedApt,
@@ -967,9 +1104,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     playNotificationSound();
 
     const isZoom = apt.type === 'zoom' || apt.type === 'en_ligne';
-    const modeLabel = isZoom ? 'Zoom (Visioconférence)' : 'WhatsApp (Appel / Vidéo)';
-    const zoomText = isZoom ? ` 🎥 Rejoindre le cours sur Zoom : ${effectiveZoomLink}` : '';
-    const waBody = `COURS AYMEN : ✅ Salam Aleykoum ${apt.patientName}, Aymen a confirmé votre cours de ${apt.motif} le ${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris). Mode : ${modeLabel}.${zoomText} ${note ? `Note d'Aymen : "${note}"` : ''}`;
+    const zoomText = isZoom ? ` Lien Zoom : ${effectiveZoomLink}` : ' sur WhatsApp.';
+    const waBody = `Salam aleykoum ${apt.patientName}, cours validé le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris)${zoomText}${note ? ` (${note})` : ''}`;
 
     let cleanStudentPhone = apt.patientPhone.replace(/[\s.-]/g, '');
     if (cleanStudentPhone.startsWith('0') && cleanStudentPhone.length === 10) {
@@ -982,13 +1118,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       recipientName: apt.patientName,
       recipientContact: apt.patientPhone,
       body: waBody,
-      badge: 'Cours Confirmé (WhatsApp)',
-      dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time} (Heure de Paris)`,
+      badge: 'Cours Confirmé',
+      dateInfo: `${formatDisplayDate(apt.date)} à ${apt.time} (Paris)`,
       nativeWhatsAppUrl: studentWaUrl,
-      statusInfo: 'Confirmation transmise par WhatsApp'
+      statusInfo: 'Confirmation transmise'
     });
 
-    showToast('Cours validé !', `Le cours avec ${apt.patientName} a été confirmé et enregistré sur l'application.`, 'success');
+    showToast('Cours validé !', `${apt.patientName} : le ${formatDisplayDate(apt.date)} à ${apt.time} (Paris).`, 'success');
   };
 
   // 3. Aymen Proposes Another Date/Time (Counter-proposal)
@@ -1023,8 +1159,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const notifForStudent: AppNotification = {
       id: 'notif-' + Date.now(),
       targetRole: 'patient',
-      title: '🔄 Nouvel horaire proposé par Aymen',
-      message: `Aymen vous propose de déplacer le cours au ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message : "${message}"`,
+      title: '🔄 Nouvel horaire proposé',
+      message: `Cours déplacé au ${formatDisplayDate(newDate)} à ${newTime} (Paris).${message ? ` (${message})` : ''}`,
       type: 'counter_proposed',
       appointmentId: id,
       appointmentData: updatedApt,
@@ -1036,7 +1172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => [notifForStudent, ...prev]);
     playNotificationSound();
 
-    const waBody = `COURS AYMEN : 🔄 Salam Aleykoum ${apt.patientName}, Aymen vous propose un nouvel horaire : le ${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris). Message d'Aymen : "${message}".`;
+    const waBody = `Salam aleykoum ${apt.patientName}, nouvel horaire proposé : le ${formatDisplayDate(newDate)} à ${newTime} (Paris).${message ? ` (${message})` : ''}`;
 
     let cleanStudentPhone = apt.patientPhone.replace(/[\s.-]/g, '');
     if (cleanStudentPhone.startsWith('0') && cleanStudentPhone.length === 10) {
@@ -1049,10 +1185,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       recipientName: apt.patientName,
       recipientContact: apt.patientPhone,
       body: waBody,
-      badge: 'Proposition transmise (WhatsApp)',
-      dateInfo: `${formatDisplayDate(newDate)} à ${newTime} (Heure de Paris)`,
+      badge: 'Nouvel horaire proposé',
+      dateInfo: `${formatDisplayDate(newDate)} à ${newTime} (Paris)`,
       nativeWhatsAppUrl: studentWaUrl,
-      statusInfo: 'Transmis en direct par WhatsApp'
+      statusInfo: 'Transmis par WhatsApp'
     });
 
     showToast('Nouvel horaire envoyé', `Votre proposition (${formatDisplayDate(newDate)} à ${newTime} - Heure de Paris) a été enregistrée.`, 'info');
@@ -1297,10 +1433,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSlotsForDate,
         applyPresetToDate,
         clearSlotsForDate,
+        copyDateSlotsToWeek,
         copyDateSlotsToTwoWeeks,
         setAllDatesOpen,
+        openAll7DaysWithDefaultSlots,
         openAll14DaysWithDefaultSlots,
         resetDateToDefault,
+        resetAllToDefault,
         resetAllTwoWeeksToDefault,
         toggleDayEnabled,
         toggleSlotForDay,
@@ -1340,17 +1479,25 @@ export function formatToLocalISO(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getFourteenDaysList(): FourteenDayItem[] {
-  const days: FourteenDayItem[] = [];
+export function getSundayToSundayList(weekOffset: number = 0): SevenDayItem[] {
+  const days: SevenDayItem[] = [];
   const baseToday = new Date();
   baseToday.setHours(0, 0, 0, 0);
 
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(baseToday);
-    d.setDate(baseToday.getDate() + i);
+  // In JavaScript, getDay() returns 0 for Sunday, 1 for Monday, ..., 6 for Saturday
+  const currentDayOfWeek = baseToday.getDay(); // 0 is Sunday
+  const startSunday = new Date(baseToday);
+  startSunday.setDate(baseToday.getDate() - currentDayOfWeek + (weekOffset * 7));
+
+  // 8 days: Dimanche through following Dimanche
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(startSunday);
+    d.setDate(startSunday.getDate() + i);
     const iso = formatToLocalISO(d);
-    const isToday = i === 0;
-    const isTomorrow = i === 1;
+
+    const diffFromToday = Math.round((d.getTime() - baseToday.getTime()) / (1000 * 60 * 60 * 24));
+    const isToday = diffFromToday === 0;
+    const isTomorrow = diffFromToday === 1;
 
     const weekdayShort = d.toLocaleDateString('fr-FR', { weekday: 'short' });
     const weekdayLong = d.toLocaleDateString('fr-FR', { weekday: 'long' });
@@ -1358,17 +1505,20 @@ export function getFourteenDaysList(): FourteenDayItem[] {
 
     days.push({
       iso,
-      diffDays: i,
+      diffDays: diffFromToday,
       dayName: isToday ? "Aujourd'hui" : isTomorrow ? "Demain" : capitalizedWeekday,
       weekdayShort: weekdayShort.charAt(0).toUpperCase() + weekdayShort.slice(1),
       weekdayLong: capitalizedWeekday,
       formattedShort: d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
       formattedFull: d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
-      weekNumber: i < 7 ? 1 : 2
+      weekNumber: (weekOffset === 0 ? 1 : 2)
     });
   }
   return days;
 }
+
+export const getSevenDaysList = (weekOffset: number = 0) => getSundayToSundayList(weekOffset);
+export const getFourteenDaysList = getSevenDaysList;
 
 export function formatDisplayDate(dateStr: string): string {
   try {
